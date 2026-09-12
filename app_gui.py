@@ -1,7 +1,7 @@
 import os
 import sys
 from PyQt5.QtCore import Qt, QSize, QRectF, QRect, pyqtSignal, QPoint
-from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QPen, QCursor
+from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QPen, QCursor, QPixmap
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
@@ -611,10 +611,29 @@ class FlowListApp(QMainWindow):
         title_col.setSpacing(2)
         title_col.setContentsMargins(0, 2, 0, 2)
 
-        title_lbl = QLabel('<span style="color:#ffffff; font-size:19px; font-weight:800;">Task</span><span style="color:#3b82f6; font-size:19px; font-weight:800;">Flow</span>')
+        title_row = QHBoxLayout()
+        title_row.setSpacing(8)
+        title_row.setContentsMargins(0, 0, 0, 0)
+
+        # Concept 3 High-Fidelity Logo Icon
+        logo_lbl = QLabel()
+        logo_path = get_resource_path(os.path.join("resources", "app_logo.png"))
+        if os.path.exists(logo_path):
+            logo_pix = QPixmap(logo_path).scaled(84, 84, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            logo_pix.setDevicePixelRatio(3.0)
+            logo_lbl.setPixmap(logo_pix)
+            logo_lbl.setFixedSize(28, 28)
+        logo_lbl.setStyleSheet("border: none; background: transparent;")
+        logo_lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        title_row.addWidget(logo_lbl)
+
+        title_lbl = QLabel('<span style="color:#ffffff; font-size:19px; font-weight:800; letter-spacing: -0.3px;">Task</span><span style="color:#3b82f6; font-size:19px; font-weight:800; letter-spacing: -0.3px;">Flow</span>')
         title_lbl.setStyleSheet("border: none;")
         title_lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        title_col.addWidget(title_lbl)
+        title_row.addWidget(title_lbl)
+        title_row.addStretch()
+
+        title_col.addLayout(title_row)
 
         sub_lbl = QLabel("Planla  •  Yap  •  Tamamla")
         sub_lbl.setStyleSheet("color: #5c6f8f; font-size: 11px; font-weight: 500; border: none;")

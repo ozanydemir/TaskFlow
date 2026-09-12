@@ -4,12 +4,13 @@ import sys
 import shutil
 
 def build():
-    print("Starting FlowList EXE build...")
+    print("Starting TaskFlow EXE build...")
     
     # Ensure resources exist
-    if not os.path.exists("resources/icon.ico") or not os.path.exists("resources/icon.png"):
+    if not os.path.exists("resources/icon.ico") or not os.path.exists("resources/icon.png") or not os.path.exists("resources/app_logo.png"):
         print("Resources not found! Generating icons...")
         import generate_icon
+        generate_icon.generate_icons()
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
