@@ -19,11 +19,39 @@ def get_resource_path(relative_path):
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
-check_icon_path = get_resource_path(os.path.join("resources", "check_mark.png")).replace("\\", "/")
+white_check_path = get_resource_path(os.path.join("resources", "check_mark_white.png")).replace("\\", "/")
 
-# --- Custom In-App Modal Dialogs ---
+# Icon mappings for project names
+PROJECT_ICONS = {
+    'Genel': '💼',
+    'İş': '💻',
+    'Kişisel': '👤',
+    'Acil': '❗',
+    'deneme': '🧪'
+}
+
+def get_project_display_name(name):
+    icon = PROJECT_ICONS.get(name, '🧪')
+    return f"{icon} {name}"
+
+PROJECT_BADGE_STYLES = {
+    'Genel': ('#082029', '#06b6d4', '#06b6d4'),
+    'İş': ('#0c1e38', '#3b82f6', '#3b82f6'),
+    'Kişisel': ('#0a261a', '#10b981', '#10b981'),
+    'Acil': ('#2e1117', '#ef4444', '#ef4444'),
+    'deneme': ('#211136', '#a855f7', '#a855f7')
+}
+
+def get_badge_style(name):
+    if name in PROJECT_BADGE_STYLES:
+        return PROJECT_BADGE_STYLES[name]
+    # Fallback to purple / indigo palette
+    return ('#211136', '#a855f7', '#a855f7')
+
+
+# --- Custom In-Theme Modal Dialogs ---
 class ModernDialog(QDialog):
-    """Sleek dark frameless modal dialog matching the cyberpunk theme"""
+    """Sleek dark navy modal dialog matching the theme"""
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
@@ -37,9 +65,9 @@ class ModernDialog(QDialog):
         self.card = QFrame(self)
         self.card.setStyleSheet("""
             QFrame {
-                background-color: #0c1017;
-                border: 1px solid #00f2fe;
-                border-radius: 12px;
+                background-color: #090d16;
+                border: 1px solid #2563eb;
+                border-radius: 14px;
             }
         """)
         outer_layout.addWidget(self.card)
@@ -57,23 +85,23 @@ class CustomInputDialog(ModernDialog):
     def __init__(self, title, prompt, parent=None):
         super().__init__(title, parent)
         prompt_lbl = QLabel(prompt)
-        prompt_lbl.setStyleSheet("color: #8fa0b5; font-size: 12px; border: none;")
+        prompt_lbl.setStyleSheet("color: #71829e; font-size: 12px; border: none;")
         self.card_layout.addWidget(prompt_lbl)
 
         self.input_field = QLineEdit()
         self.input_field.setStyleSheet("""
             QLineEdit {
-                background-color: #131822;
+                background-color: #0e1422;
                 color: #ffffff;
-                border: 1px solid #202a3a;
+                border: 1px solid #1e2a42;
                 border-radius: 8px;
                 padding: 8px 12px;
                 font-size: 13px;
-                selection-background-color: #00f2fe;
-                selection-color: #081018;
+                selection-background-color: #2563eb;
+                selection-color: #ffffff;
             }
             QLineEdit:focus {
-                border: 1px solid #00f2fe;
+                border: 1px solid #3b82f6;
             }
         """)
         self.input_field.returnPressed.connect(self.accept)
@@ -87,16 +115,16 @@ class CustomInputDialog(ModernDialog):
         cancel_btn.setCursor(Qt.PointingHandCursor)
         cancel_btn.setStyleSheet("""
             QPushButton {
-                background-color: #161c27;
-                color: #8fa0b5;
-                border: 1px solid #232d3e;
+                background-color: #101726;
+                color: #71829e;
+                border: 1px solid #1a253a;
                 border-radius: 8px;
                 padding: 6px 14px;
                 font-size: 12px;
                 font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #1f2736;
+                background-color: #162035;
                 color: #ffffff;
             }
         """)
@@ -107,8 +135,8 @@ class CustomInputDialog(ModernDialog):
         ok_btn.setCursor(Qt.PointingHandCursor)
         ok_btn.setStyleSheet("""
             QPushButton {
-                background-color: #00f2fe;
-                color: #081018;
+                background-color: #2563eb;
+                color: #ffffff;
                 border: none;
                 border-radius: 8px;
                 padding: 6px 16px;
@@ -116,7 +144,7 @@ class CustomInputDialog(ModernDialog):
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #33f5fe;
+                background-color: #3b82f6;
             }
         """)
         ok_btn.clicked.connect(self.accept)
@@ -133,7 +161,7 @@ class CustomConfirmDialog(ModernDialog):
         super().__init__(title, parent)
         msg_lbl = QLabel(message)
         msg_lbl.setWordWrap(True)
-        msg_lbl.setStyleSheet("color: #a0aec0; font-size: 13px; border: none; line-height: 1.4;")
+        msg_lbl.setStyleSheet("color: #94a3b8; font-size: 13px; border: none; line-height: 1.4;")
         self.card_layout.addWidget(msg_lbl)
 
         btn_layout = QHBoxLayout()
@@ -144,16 +172,16 @@ class CustomConfirmDialog(ModernDialog):
         cancel_btn.setCursor(Qt.PointingHandCursor)
         cancel_btn.setStyleSheet("""
             QPushButton {
-                background-color: #161c27;
-                color: #8fa0b5;
-                border: 1px solid #232d3e;
+                background-color: #101726;
+                color: #71829e;
+                border: 1px solid #1a253a;
                 border-radius: 8px;
                 padding: 6px 14px;
                 font-size: 12px;
                 font-weight: 600;
             }
             QPushButton:hover {
-                background-color: #1f2736;
+                background-color: #162035;
                 color: #ffffff;
             }
         """)
@@ -165,7 +193,7 @@ class CustomConfirmDialog(ModernDialog):
         if is_destructive:
             confirm_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #e53935;
+                    background-color: #ef4444;
                     color: #ffffff;
                     border: none;
                     border-radius: 8px;
@@ -174,14 +202,14 @@ class CustomConfirmDialog(ModernDialog):
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background-color: #f44336;
+                    background-color: #dc2626;
                 }
             """)
         else:
             confirm_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #00f2fe;
-                    color: #081018;
+                    background-color: #2563eb;
+                    color: #ffffff;
                     border: none;
                     border-radius: 8px;
                     padding: 6px 16px;
@@ -189,7 +217,7 @@ class CustomConfirmDialog(ModernDialog):
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background-color: #33f5fe;
+                    background-color: #3b82f6;
                 }
             """)
         confirm_btn.clicked.connect(self.accept)
@@ -200,7 +228,7 @@ class CustomConfirmDialog(ModernDialog):
 
 # --- Circular Progress Ring ---
 class CircularProgressWidget(QWidget):
-    def __init__(self, size=38, parent=None):
+    def __init__(self, size=44, parent=None):
         super().__init__(parent)
         self.widget_size = size
         self.percentage = 0
@@ -215,19 +243,19 @@ class CircularProgressWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        pen_width = 3.2
+        pen_width = 3.6
         margin = pen_width / 2.0 + 1.2
         rect = QRectF(margin, margin, self.widget_size - 2*margin, self.widget_size - 2*margin)
 
-        # Background track
-        bg_pen = QPen(QColor(24, 33, 46), pen_width)
+        # Background track (Dark navy blue)
+        bg_pen = QPen(QColor(19, 27, 46), pen_width)
         bg_pen.setCapStyle(Qt.RoundCap)
         painter.setPen(bg_pen)
         painter.drawArc(rect, 0, 360 * 16)
 
-        # Glowing cyan progress arc
+        # Glowing royal blue progress arc
         if self.percentage > 0:
-            fg_pen = QPen(QColor(0, 242, 254), pen_width)
+            fg_pen = QPen(QColor(41, 121, 255), pen_width)
             fg_pen.setCapStyle(Qt.RoundCap)
             painter.setPen(fg_pen)
             start_angle = 90 * 16
@@ -235,8 +263,8 @@ class CircularProgressWidget(QWidget):
             painter.drawArc(rect, start_angle, span_angle)
 
         # Center percentage
-        painter.setPen(QColor(240, 246, 252))
-        font = QFont("Segoe UI", 7, QFont.Bold)
+        painter.setPen(QColor(255, 255, 255))
+        font = QFont("Segoe UI", 8, QFont.Bold)
         painter.setFont(font)
         painter.drawText(self.rect(), Qt.AlignCenter, f"{self.percentage}%")
 
@@ -255,28 +283,28 @@ class TaskItemWidget(QWidget):
     def _init_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(10)
+        layout.setSpacing(12)
 
-        # 1. Custom Checkbox
+        # 1. Custom Rounded Square Checkbox
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(self.task.get('completed', False))
         self.checkbox.setCursor(Qt.PointingHandCursor)
         self.checkbox.stateChanged.connect(lambda: self.task_toggled.emit(self.task['id']))
         self.checkbox.setStyleSheet(f"""
             QCheckBox::indicator {{
-                width: 19px;
-                height: 19px;
-                border: 2px solid #2d3b4e;
+                width: 20px;
+                height: 20px;
+                border: 2px solid #23324d;
                 border-radius: 6px;
-                background-color: #0c1017;
+                background-color: #0c121e;
             }}
             QCheckBox::indicator:hover {{
-                border-color: #00f2fe;
+                border-color: #3b82f6;
             }}
             QCheckBox::indicator:checked {{
-                background-color: #00f2fe;
-                border-color: #00f2fe;
-                image: url({check_icon_path});
+                background-color: #2563eb;
+                border-color: #3b82f6;
+                image: url({white_check_path});
             }}
         """)
         layout.addWidget(self.checkbox)
@@ -288,19 +316,20 @@ class TaskItemWidget(QWidget):
         self._update_text_style()
         layout.addWidget(self.title_label)
 
-        # 3. Project Neon Badge
+        # 3. Project Badge (Pill)
         proj = self.task.get('project', 'Genel')
+        bg_col, fg_col, border_col = get_badge_style(proj)
         self.badge = QLabel(f" [{proj}] ")
-        self.badge.setStyleSheet("""
-            QLabel {
-                background-color: #0b1a26;
-                color: #00f2fe;
-                border: 1px solid #00f2fe66;
+        self.badge.setStyleSheet(f"""
+            QLabel {{
+                background-color: {bg_col};
+                color: {fg_col};
+                border: 1px solid {border_col};
                 border-radius: 6px;
-                padding: 2px 7px;
+                padding: 3px 8px;
                 font-size: 11px;
                 font-weight: 600;
-            }
+            }}
         """)
         layout.addWidget(self.badge)
 
@@ -312,15 +341,15 @@ class TaskItemWidget(QWidget):
         self.del_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
-                color: #4b586c;
+                color: #5c6f8f;
                 border: none;
                 border-radius: 4px;
-                font-size: 12px;
+                font-size: 13px;
                 font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #38151c;
-                color: #ff5370;
+                color: #ef4444;
             }
         """)
         self.del_btn.clicked.connect(lambda: self.task_deleted.emit(self.task['id']))
@@ -331,11 +360,11 @@ class TaskItemWidget(QWidget):
         if self.task.get('completed'):
             font.setStrikeOut(True)
             self.title_label.setFont(font)
-            self.title_label.setStyleSheet("color: #4e5d72; border: none;")
+            self.title_label.setStyleSheet("color: #475569; border: none;")
         else:
             font.setStrikeOut(False)
             self.title_label.setFont(font)
-            self.title_label.setStyleSheet("color: #e6edf3; border: none;")
+            self.title_label.setStyleSheet("color: #e2e8f0; border: none;")
 
     def mouseDoubleClickEvent(self, event):
         dialog = CustomInputDialog("Görevi Düzenle", "Yeni görev metnini girin:", self)
@@ -373,7 +402,7 @@ class FlowListApp(QMainWindow):
         self.current_project = self.task_manager.settings.get('selected_project', 'Tümü')
         self.start_minimized = start_minimized
 
-        # Ensure Windows Autostart is permanently registered
+        # Ensure Windows Autostart is active
         try:
             autostart.set_autostart(True)
         except Exception:
@@ -391,24 +420,22 @@ class FlowListApp(QMainWindow):
             self.hide()
             self.tray_icon.showMessage(
                 "TaskFlow",
-                "Uygulama arka planda sistem tepsisinde çalışıyor.",
+                "Uygulama arka planda sistem tepsisinde başlatıldı.",
                 QSystemTrayIcon.Information,
                 2000
             )
 
     def _setup_window(self):
-        # Remove standard OS title bar completely
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-        self.setMinimumSize(360, 480)
-        self.resize(440, 620)
+        self.setMinimumSize(360, 520)
+        self.resize(440, 640)
 
         icon_path = get_resource_path(os.path.join("resources", "icon.png"))
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        # Check always on top
         if self.task_manager.settings.get('always_on_top', False):
             self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
 
@@ -425,9 +452,9 @@ class FlowListApp(QMainWindow):
         tray_menu = QMenu()
         tray_menu.setStyleSheet("""
             QMenu {
-                background-color: #0c1017;
-                color: #e6edf3;
-                border: 1px solid #00f2fe44;
+                background-color: #090d16;
+                color: #e2e8f0;
+                border: 1px solid #1e2a42;
                 border-radius: 8px;
                 padding: 4px;
             }
@@ -436,8 +463,8 @@ class FlowListApp(QMainWindow):
                 border-radius: 4px;
             }
             QMenu::item:selected {
-                background-color: #00f2fe;
-                color: #081018;
+                background-color: #2563eb;
+                color: #ffffff;
                 font-weight: bold;
             }
         """)
@@ -457,107 +484,120 @@ class FlowListApp(QMainWindow):
         self.tray_icon.show()
 
     def _setup_ui(self):
-        # Outer translucent central widget
         outer_central = QWidget(self)
         outer_layout = QVBoxLayout(outer_central)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         self.setCentralWidget(outer_central)
 
-        # App Frame (Obsidian card with subtle cyan border)
+        # Outer App Card
         self.app_frame = QFrame(outer_central)
         self.app_frame.setObjectName("AppFrame")
         self.app_frame.setStyleSheet("""
             QFrame#AppFrame {
-                background-color: #0c1017;
-                border: 1px solid #1a2536;
-                border-radius: 14px;
+                background-color: #090d16;
+                border: 1px solid #141c2d;
+                border-radius: 18px;
             }
         """)
         outer_layout.addWidget(self.app_frame)
 
         app_layout = QVBoxLayout(self.app_frame)
-        app_layout.setContentsMargins(16, 12, 16, 8)
-        app_layout.setSpacing(12)
+        app_layout.setContentsMargins(18, 16, 18, 12)
+        app_layout.setSpacing(14)
 
-        # 1. Custom Draggable Header Bar
+        # 1. Header Bar
         self.header_bar = DraggableHeader(self)
         self.header_bar.setObjectName("HeaderBar")
         self.header_bar.setStyleSheet("QFrame#HeaderBar { background: transparent; border: none; }")
         header_layout = QHBoxLayout(self.header_bar)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(10)
+        header_layout.setSpacing(12)
 
         # Circular progress ring
-        self.progress_ring = CircularProgressWidget(size=38)
+        self.progress_ring = CircularProgressWidget(size=44)
         header_layout.addWidget(self.progress_ring)
 
-        # Title
-        title_lbl = QLabel("TaskFlow")
-        title_lbl.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 800; border: none; letter-spacing: 0.5px;")
-        header_layout.addWidget(title_lbl)
+        # Title & Subtitle
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        title_col.setContentsMargins(0, 2, 0, 2)
 
+        title_lbl = QLabel('<span style="color:#ffffff; font-size:19px; font-weight:800;">Task</span><span style="color:#3b82f6; font-size:19px; font-weight:800;">Flow</span>')
+        title_lbl.setStyleSheet("border: none;")
+        title_col.addWidget(title_lbl)
+
+        sub_lbl = QLabel("Planla  •  Yap  •  Tamamla")
+        sub_lbl.setStyleSheet("color: #5c6f8f; font-size: 11px; font-weight: 500; border: none;")
+        title_col.addWidget(sub_lbl)
+
+        header_layout.addLayout(title_col)
         header_layout.addStretch()
 
-        # Pin (Always on top) button
+        # Right Action Buttons
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(8)
+
+        # Pin (Always on top) button with red pin icon
         self.pin_btn = QPushButton("📌")
-        self.pin_btn.setFixedSize(30, 30)
+        self.pin_btn.setFixedSize(32, 32)
         self.pin_btn.setCheckable(True)
         self.pin_btn.setChecked(self.task_manager.settings.get('always_on_top', False))
         self.pin_btn.setToolTip("Pencereyi Her Zaman En Üstte Tut")
         self.pin_btn.setCursor(Qt.PointingHandCursor)
         self.pin_btn.clicked.connect(self._toggle_pin)
         self._update_pin_style()
-        header_layout.addWidget(self.pin_btn)
+        btn_box.addWidget(self.pin_btn)
 
-        # Minimize to Tray button
+        # Minimize to Tray button (—)
         self.hide_btn = QPushButton("—")
-        self.hide_btn.setFixedSize(30, 30)
+        self.hide_btn.setFixedSize(32, 32)
         self.hide_btn.setToolTip("Sistem Tepsisine Gizle")
         self.hide_btn.setCursor(Qt.PointingHandCursor)
         self.hide_btn.setStyleSheet("""
             QPushButton {
-                background-color: #121722;
-                color: #8fa0b5;
-                border: 1px solid #1d2737;
+                background-color: #101726;
+                color: #71829e;
+                border: 1px solid #1a253a;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #162035;
+                color: #3b82f6;
+                border-color: #3b82f6;
+            }
+        """)
+        self.hide_btn.clicked.connect(self.hide_to_tray)
+        btn_box.addWidget(self.hide_btn)
+
+        # Close button (✕)
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setFixedSize(32, 32)
+        self.close_btn.setToolTip("Gizle (Kapat)")
+        self.close_btn.setCursor(Qt.PointingHandCursor)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #101726;
+                color: #71829e;
+                border: 1px solid #1a253a;
                 border-radius: 8px;
                 font-size: 13px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #1a2230;
-                color: #00f2fe;
-                border-color: #00f2fe;
-            }
-        """)
-        self.hide_btn.clicked.connect(self.hide_to_tray)
-        header_layout.addWidget(self.hide_btn)
-
-        # Close button
-        self.close_btn = QPushButton("✕")
-        self.close_btn.setFixedSize(30, 30)
-        self.close_btn.setToolTip("Gizle (Kapat)")
-        self.close_btn.setCursor(Qt.PointingHandCursor)
-        self.close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #121722;
-                color: #8fa0b5;
-                border: 1px solid #1d2737;
-                border-radius: 8px;
-                font-size: 12px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
                 background-color: #38151c;
-                color: #ff5370;
-                border-color: #ff5370;
+                color: #ef4444;
+                border-color: #ef4444;
             }
         """)
         self.close_btn.clicked.connect(self.hide_to_tray)
-        header_layout.addWidget(self.close_btn)
+        btn_box.addWidget(self.close_btn)
 
+        header_layout.addLayout(btn_box)
         app_layout.addWidget(self.header_bar)
 
-        # 2. Responsive Project Tabs Bar (Scroll Area to prevent stretching)
+        # 2. Project Tabs Bar (Scroll Area)
         tabs_scroll = QScrollArea()
         tabs_scroll.setWidgetResizable(True)
         tabs_scroll.setFixedHeight(38)
@@ -574,65 +614,76 @@ class FlowListApp(QMainWindow):
 
         app_layout.addWidget(tabs_scroll)
 
-        # 3. Clean Task Input Section (No General/Work combobox!)
-        input_container = QFrame()
-        input_container.setStyleSheet("background: transparent; border: none;")
-        input_layout = QHBoxLayout(input_container)
-        input_layout.setContentsMargins(0, 0, 0, 0)
-        input_layout.setSpacing(8)
+        # 3. Input Section (Pencil Icon Inside + Gradient '+' Button)
+        input_row = QHBoxLayout()
+        input_row.setSpacing(10)
+
+        # Input Box Frame with Pencil Icon
+        input_box = QFrame()
+        input_box.setFixedHeight(42)
+        input_box.setStyleSheet("""
+            QFrame {
+                background-color: #0e1422;
+                border: 1px solid #182338;
+                border-radius: 12px;
+            }
+        """)
+        box_layout = QHBoxLayout(input_box)
+        box_layout.setContentsMargins(10, 0, 10, 0)
+        box_layout.setSpacing(8)
+
+        pencil_icon = QLabel("✏️")
+        pencil_icon.setStyleSheet("border: none; font-size: 13px; color: #5c6f8f;")
+        box_layout.addWidget(pencil_icon)
 
         self.task_input = QLineEdit()
         self.task_input.setPlaceholderText("Yeni bir görev yazın... [Enter]")
         self.task_input.setStyleSheet("""
             QLineEdit {
-                background-color: #10151f;
+                background: transparent;
                 color: #ffffff;
-                border: 1px solid #1c2636;
-                border-radius: 10px;
-                padding: 10px 14px;
+                border: none;
                 font-size: 13px;
-                selection-background-color: #00f2fe;
-                selection-color: #081018;
-            }
-            QLineEdit:focus {
-                border: 1px solid #00f2fe;
-                background-color: #121824;
+                selection-background-color: #2563eb;
+                selection-color: #ffffff;
             }
         """)
         self.task_input.returnPressed.connect(self._add_task)
-        input_layout.addWidget(self.task_input, 1)
+        box_layout.addWidget(self.task_input, 1)
 
-        # Sleek compact '+' Add Button
+        input_row.addWidget(input_box, 1)
+
+        # Gradient '+' Add Button
         self.add_btn = QPushButton("+")
-        self.add_btn.setFixedSize(38, 38)
+        self.add_btn.setFixedSize(42, 42)
         self.add_btn.setCursor(Qt.PointingHandCursor)
         self.add_btn.setToolTip("Görev Ekle")
         self.add_btn.setStyleSheet("""
             QPushButton {
-                background-color: #00f2fe;
-                color: #081018;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #8b5cf6);
+                color: #ffffff;
                 border: none;
-                border-radius: 10px;
-                font-size: 18px;
+                border-radius: 12px;
+                font-size: 20px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #38f6fe;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #60a5fa, stop:1 #a855f7);
             }
             QPushButton:pressed {
-                background-color: #00cbd6;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #2563eb, stop:1 #7c3aed);
             }
         """)
         self.add_btn.clicked.connect(self._add_task)
-        input_layout.addWidget(self.add_btn)
+        input_row.addWidget(self.add_btn)
 
-        app_layout.addWidget(input_container)
+        app_layout.addLayout(input_row)
 
-        # 4. Task List Widget (No horizontal scrollbar, clean styling)
+        # 4. Task List Widget (No horizontal scrollbar)
         self.task_list_widget = QListWidget()
         self.task_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.task_list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.task_list_widget.setSpacing(4)
+        self.task_list_widget.setSpacing(5)
         self.task_list_widget.setStyleSheet("""
             QListWidget {
                 background-color: transparent;
@@ -640,14 +691,14 @@ class FlowListApp(QMainWindow):
                 outline: none;
             }
             QListWidget::item {
-                background-color: #10151f;
-                border: 1px solid #1a2434;
-                border-radius: 10px;
-                margin-bottom: 4px;
+                background-color: #0e1422;
+                border: 1px solid #182338;
+                border-radius: 12px;
+                margin-bottom: 2px;
             }
             QListWidget::item:hover {
-                background-color: #141b27;
-                border-color: #243349;
+                background-color: #121a2c;
+                border-color: #23334e;
             }
             QScrollBar:vertical {
                 border: none;
@@ -656,12 +707,12 @@ class FlowListApp(QMainWindow):
                 margin: 0;
             }
             QScrollBar::handle:vertical {
-                background: #1c2636;
+                background: #182338;
                 min-height: 20px;
                 border-radius: 2px;
             }
             QScrollBar::handle:vertical:hover {
-                background: #00f2fe;
+                background: #3b82f6;
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
@@ -669,25 +720,28 @@ class FlowListApp(QMainWindow):
         """)
         app_layout.addWidget(self.task_list_widget, 1)
 
-        # 5. Clean Footer / Status Bar
-        footer_container = QFrame()
-        footer_container.setStyleSheet("background: transparent; border: none;")
-        footer_layout = QHBoxLayout(footer_container)
-        footer_layout.setContentsMargins(4, 4, 0, 0)
-        footer_layout.setSpacing(10)
+        # 5. Footer Status Bar
+        footer_row = QHBoxLayout()
+        footer_row.setContentsMargins(6, 4, 0, 0)
+        footer_row.setSpacing(12)
 
-        self.stats_lbl = QLabel("0 aktif görev")
-        self.stats_lbl.setStyleSheet("color: #728296; font-size: 11px; font-weight: 500; border: none;")
-        footer_layout.addWidget(self.stats_lbl)
+        self.stats_lbl = QLabel('7 aktif görev')
+        self.stats_lbl.setStyleSheet("border: none;")
+        footer_row.addWidget(self.stats_lbl)
 
-        footer_layout.addStretch()
+        # Vertical separator line
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setFixedHeight(16)
+        sep.setStyleSheet("color: #1e293b; background-color: #1e293b; border: none;")
+        footer_row.addWidget(sep)
 
-        self.clear_btn = QPushButton("Tamamlananları Temizle")
+        self.clear_btn = QPushButton("🧹 Tamamlananları Temizle")
         self.clear_btn.setCursor(Qt.PointingHandCursor)
         self.clear_btn.setStyleSheet("""
             QPushButton {
                 background-color: transparent;
-                color: #728296;
+                color: #8b9bb4;
                 border: none;
                 border-radius: 6px;
                 padding: 4px 8px;
@@ -695,20 +749,22 @@ class FlowListApp(QMainWindow):
                 font-weight: 500;
             }
             QPushButton:hover {
-                color: #ff5370;
+                color: #ef4444;
                 background-color: #26141a;
             }
         """)
         self.clear_btn.clicked.connect(self._confirm_clear_completed)
-        footer_layout.addWidget(self.clear_btn)
+        footer_row.addWidget(self.clear_btn)
 
-        # Size grip in the corner for seamless frameless window resizing
+        footer_row.addStretch()
+
+        # Corner resize grip
         self.size_grip = QSizeGrip(self)
         self.size_grip.setFixedSize(14, 14)
         self.size_grip.setStyleSheet("background: transparent;")
-        footer_layout.addWidget(self.size_grip, 0, Qt.AlignBottom | Qt.AlignRight)
+        footer_row.addWidget(self.size_grip, 0, Qt.AlignBottom | Qt.AlignRight)
 
-        app_layout.addWidget(footer_container)
+        app_layout.addLayout(footer_row)
 
     def _refresh_project_tabs(self):
         while self.project_tabs_layout.count():
@@ -717,8 +773,8 @@ class FlowListApp(QMainWindow):
             if w:
                 w.deleteLater()
 
-        # [All] tab
-        all_btn = QPushButton("[All]")
+        # [Tümü] tab
+        all_btn = QPushButton("Tümü")
         all_btn.setCheckable(True)
         all_btn.setChecked(self.current_project == "Tümü")
         all_btn.setCursor(Qt.PointingHandCursor)
@@ -726,9 +782,10 @@ class FlowListApp(QMainWindow):
         all_btn.clicked.connect(lambda: self._select_project("Tümü"))
         self.project_tabs_layout.addWidget(all_btn)
 
-        # Project tabs
+        # Project tabs with icons
         for proj in self.task_manager.projects:
-            p_btn = QPushButton(f"[{proj}]")
+            display_title = get_project_display_name(proj)
+            p_btn = QPushButton(display_title)
             p_btn.setCheckable(True)
             p_btn.setChecked(self.current_project == proj)
             p_btn.setCursor(Qt.PointingHandCursor)
@@ -740,24 +797,24 @@ class FlowListApp(QMainWindow):
                 p_btn.customContextMenuRequested.connect(lambda pos, p=proj: self._show_project_menu(p))
             self.project_tabs_layout.addWidget(p_btn)
 
-        # Add Project Button
+        # Add Project Button '+'
         add_p_btn = QPushButton("+")
         add_p_btn.setCursor(Qt.PointingHandCursor)
         add_p_btn.setToolTip("Yeni Proje Sekmesi Ekle")
         add_p_btn.setStyleSheet("""
             QPushButton {
-                background-color: #10151f;
-                color: #8fa0b5;
-                border: 1px dashed #202b3c;
-                border-radius: 10px;
+                background-color: #0f1523;
+                color: #71829e;
+                border: 1px solid #1a2438;
+                border-radius: 12px;
                 padding: 4px 10px;
                 font-size: 14px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: #17202d;
-                color: #00f2fe;
-                border-color: #00f2fe;
+                background-color: #162035;
+                color: #3b82f6;
+                border-color: #3b82f6;
             }
         """)
         add_p_btn.clicked.connect(self._prompt_add_project)
@@ -769,11 +826,11 @@ class FlowListApp(QMainWindow):
         if is_active:
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #00f2fe;
-                    color: #081018;
-                    border: 1px solid #00f2fe;
-                    border-radius: 10px;
-                    padding: 5px 12px;
+                    background-color: #2563eb;
+                    color: #ffffff;
+                    border: none;
+                    border-radius: 14px;
+                    padding: 6px 14px;
                     font-size: 12px;
                     font-weight: 700;
                 }
@@ -781,18 +838,18 @@ class FlowListApp(QMainWindow):
         else:
             btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #10151f;
-                    color: #8fa0b5;
-                    border: 1px solid #1c2636;
-                    border-radius: 10px;
+                    background-color: #0f1523;
+                    color: #71829e;
+                    border: 1px solid #1a2438;
+                    border-radius: 14px;
                     padding: 5px 12px;
                     font-size: 12px;
                     font-weight: 600;
                 }
                 QPushButton:hover {
-                    background-color: #161e2b;
-                    color: #00f2fe;
-                    border-color: #2a374c;
+                    background-color: #162035;
+                    color: #93c5fd;
+                    border-color: #2563eb;
                 }
             """)
 
@@ -818,9 +875,9 @@ class FlowListApp(QMainWindow):
         menu = QMenu(self)
         menu.setStyleSheet("""
             QMenu {
-                background-color: #0c1017;
-                color: #e6edf3;
-                border: 1px solid #00f2fe44;
+                background-color: #090d16;
+                color: #e2e8f0;
+                border: 1px solid #2563eb;
                 border-radius: 8px;
                 padding: 4px;
             }
@@ -829,7 +886,7 @@ class FlowListApp(QMainWindow):
                 border-radius: 4px;
             }
             QMenu::item:selected {
-                background-color: #ff5370;
+                background-color: #ef4444;
                 color: #ffffff;
                 font-weight: bold;
             }
@@ -869,10 +926,7 @@ class FlowListApp(QMainWindow):
         percent = int((completed / total) * 100) if total > 0 else 0
         self.progress_ring.set_percentage(percent)
 
-        if self.current_project == "Tümü":
-            self.stats_lbl.setText(f"{active} aktif görev")
-        else:
-            self.stats_lbl.setText(f"[{self.current_project}] {active} aktif görev")
+        self.stats_lbl.setText(f'<span style="color:#3b82f6; font-size:14px; font-weight:800;">{active}</span> <span style="color:#64748b; font-size:12px; font-weight:500;">aktif görev</span>')
 
         all_total, all_completed = self.task_manager.get_stats("Tümü")
         all_active = all_total - all_completed
@@ -883,7 +937,7 @@ class FlowListApp(QMainWindow):
         if not title:
             return
 
-        proj = self.current_project if self.current_project not in ("Tümü", "[All]") else "Genel"
+        proj = self.current_project if self.current_project != "Tümü" else "Genel"
 
         self.task_manager.add_task(title, proj)
         self.task_input.clear()
@@ -934,9 +988,9 @@ class FlowListApp(QMainWindow):
         if is_checked:
             self.pin_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #00f2fe;
-                    color: #081018;
-                    border: 1px solid #00f2fe;
+                    background-color: #2563eb;
+                    color: #ffffff;
+                    border: 1px solid #3b82f6;
                     border-radius: 8px;
                     font-size: 13px;
                     font-weight: bold;
@@ -945,17 +999,16 @@ class FlowListApp(QMainWindow):
         else:
             self.pin_btn.setStyleSheet("""
                 QPushButton {
-                    background-color: #121722;
-                    color: #8fa0b5;
-                    border: 1px solid #1d2737;
+                    background-color: #101726;
+                    color: #ef4444;
+                    border: 1px solid #1a253a;
                     border-radius: 8px;
                     font-size: 13px;
                     font-weight: bold;
                 }
                 QPushButton:hover {
-                    background-color: #1a2230;
-                    color: #00f2fe;
-                    border-color: #00f2fe;
+                    background-color: #162035;
+                    border-color: #ef4444;
                 }
             """)
 
