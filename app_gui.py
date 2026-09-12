@@ -23,10 +23,115 @@ white_check_path = get_resource_path(os.path.join("resources", "check_mark_white
 
 BORDER_MARGIN = 8
 
+# 16 Distinct Cyberpunk / Modern Palettes (bg, text/border)
+DISTINCT_PALETTES = [
+    ('#082029', '#00f2fe'),  # 1. Cyan / Aqua
+    ('#092618', '#10b981'),  # 2. Emerald Green
+    ('#220f38', '#c084fc'),  # 3. Electric Purple
+    ('#291e0a', '#fbbf24'),  # 4. Amber / Gold
+    ('#2e0f14', '#f87171'),  # 5. Coral Red
+    ('#0c1e3d', '#38bdf8'),  # 6. Sky Blue
+    ('#2b0c20', '#f472b6'),  # 7. Hot Pink
+    ('#1c2908', '#a3e635'),  # 8. Lime Green
+    ('#1c1138', '#818cf8'),  # 9. Indigo / Violet
+    ('#2e1708', '#fb923c'),  # 10. Orange
+    ('#082622', '#2dd4bf'),  # 11. Teal
+    ('#290a24', '#e879f9'),  # 12. Magenta
+    ('#2b2605', '#fde047'),  # 13. Canary Yellow
+    ('#0b2b30', '#38d9a9'),  # 14. Mint
+    ('#2d1a38', '#d946ef'),  # 15. Fuchsia
+    ('#142338', '#60a5fa'),  # 16. Royal Blue
+]
+
+def get_project_color(proj_name, project_list=None):
+    if not proj_name:
+        return ('#101726', '#71829e')
+    if project_list and proj_name in project_list:
+        idx = project_list.index(proj_name)
+    else:
+        idx = sum(ord(c) for c in proj_name)
+    return DISTINCT_PALETTES[idx % len(DISTINCT_PALETTES)]
+
+
+# --- Custom Drag & Wheel Scroll Area for Project Tabs ---
+class DraggableScrollArea(QScrollArea):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWidgetResizable(True)
+        self.setFixedHeight(38)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        self._dragging = False
+        self._drag_start_x = 0
+        self._scroll_start_val = 0
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._dragging = True
+            self._drag_start_x = event.globalX()
+            self._scroll_start_val = self.horizontalScrollBar().value()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            dx = event.globalX() - self._drag_start_x
+            self.horizontalScrollBar().setValue(self._scroll_start_val - dx)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._dragging = False
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        # Convert wheel scroll to horizontal scroll
+        delta = event.angleDelta().y() or event.angleDelta().x()
+        self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta)
+        event.accept()
+
+
+# --- Tab Button Supporting Drag-Scroll and Click ---
+class ScrollableTabButton(QPushButton):
+    def __init__(self, text, scroll_area, parent=None):
+        super().__init__(text, parent)
+        self.scroll_area = scroll_area
+        self._press_pos = None
+        self._is_panning = False
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._press_pos = event.globalPos()
+            self._is_panning = False
+            self.scroll_area._drag_start_x = event.globalX()
+            self.scroll_area._scroll_start_val = self.scroll_area.horizontalScrollBar().value()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._press_pos is not None:
+            dist = (event.globalPos() - self._press_pos).manhattanLength()
+            if dist > 6:
+                self._is_panning = True
+                dx = event.globalX() - self.scroll_area._drag_start_x
+                self.scroll_area.horizontalScrollBar().setValue(self.scroll_area._scroll_start_val - dx)
+                event.accept()
+                return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._is_panning:
+            self._is_panning = False
+            self._press_pos = None
+            event.accept()
+            return
+        self._is_panning = False
+        self._press_pos = None
+        super().mouseReleaseEvent(event)
+
 
 # --- Custom In-Theme Modal Dialogs ---
 class ModernDialog(QDialog):
-    """Sleek dark navy modal dialog matching the exact theme"""
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
@@ -228,7 +333,7 @@ class CircularProgressWidget(QWidget):
         painter.setPen(bg_pen)
         painter.drawArc(rect, 0, 360 * 16)
 
-        # Foreground royal blue arc
+        # Royal blue arc
         if self.percentage > 0:
             fg_pen = QPen(QColor(41, 121, 255), pen_width)
             fg_pen.setCapStyle(Qt.RoundCap)
@@ -237,7 +342,6 @@ class CircularProgressWidget(QWidget):
             span_angle = -int(self.percentage * 3.6 * 16)
             painter.drawArc(rect, start_angle, span_angle)
 
-        # Percentage text
         painter.setPen(QColor(255, 255, 255))
         font = QFont("Segoe UI", 8, QFont.Bold)
         painter.setFont(font)
@@ -250,9 +354,10 @@ class TaskItemWidget(QWidget):
     task_deleted = pyqtSignal(str)
     task_edited = pyqtSignal(str, str)
 
-    def __init__(self, task, parent=None):
+    def __init__(self, task, project_list, parent=None):
         super().__init__(parent)
         self.task = task
+        self.project_list = project_list
         self._init_ui()
 
     def _init_ui(self):
@@ -260,7 +365,7 @@ class TaskItemWidget(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(12)
 
-        # 1. Custom Rounded Square Checkbox
+        # Checkbox
         self.checkbox = QCheckBox()
         self.checkbox.setChecked(self.task.get('completed', False))
         self.checkbox.setCursor(Qt.PointingHandCursor)
@@ -284,31 +389,23 @@ class TaskItemWidget(QWidget):
         """)
         layout.addWidget(self.checkbox)
 
-        # 2. Task text
+        # Task title
         self.title_label = QLabel(self.task.get('title', ''))
         self.title_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.title_label.setWordWrap(True)
         self._update_text_style()
         layout.addWidget(self.title_label)
 
-        # 3. Project Badge (Only if project exists)
+        # Project Badge with distinct assigned color
         proj = self.task.get('project')
         if proj:
+            bg_col, fg_col = get_project_color(proj, self.project_list)
             self.badge = QLabel(f" [{proj}] ")
-            # Deterministic color for project
-            h = sum(ord(c) for c in proj) % 4
-            palettes = [
-                ('#211136', '#a855f7', '#a855f7'),
-                ('#0c1e38', '#3b82f6', '#3b82f6'),
-                ('#082029', '#06b6d4', '#06b6d4'),
-                ('#0a261a', '#10b981', '#10b981')
-            ]
-            bg_col, fg_col, border_col = palettes[h]
             self.badge.setStyleSheet(f"""
                 QLabel {{
                     background-color: {bg_col};
                     color: {fg_col};
-                    border: 1px solid {border_col};
+                    border: 1px solid {fg_col};
                     border-radius: 6px;
                     padding: 3px 8px;
                     font-size: 11px;
@@ -317,7 +414,7 @@ class TaskItemWidget(QWidget):
             """)
             layout.addWidget(self.badge)
 
-        # 4. Delete button
+        # Delete button
         self.del_btn = QPushButton("✕")
         self.del_btn.setFixedSize(22, 22)
         self.del_btn.setCursor(Qt.PointingHandCursor)
@@ -417,7 +514,6 @@ class FlowListApp(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-        # Set mouse tracking so user can resize freely from all edges
         self.setMouseTracking(True)
         self.setMinimumSize(340, 460)
         self.resize(440, 640)
@@ -532,7 +628,6 @@ class FlowListApp(QMainWindow):
         btn_box = QHBoxLayout()
         btn_box.setSpacing(8)
 
-        # Pin (Always on top) button with red pin icon
         self.pin_btn = QPushButton("📌")
         self.pin_btn.setFixedSize(32, 32)
         self.pin_btn.setCheckable(True)
@@ -543,7 +638,6 @@ class FlowListApp(QMainWindow):
         self._update_pin_style()
         btn_box.addWidget(self.pin_btn)
 
-        # Minimize to Tray button (—)
         self.hide_btn = QPushButton("—")
         self.hide_btn.setFixedSize(32, 32)
         self.hide_btn.setToolTip("Sistem Tepsisine Gizle")
@@ -566,7 +660,6 @@ class FlowListApp(QMainWindow):
         self.hide_btn.clicked.connect(self.hide_to_tray)
         btn_box.addWidget(self.hide_btn)
 
-        # Close button (✕)
         self.close_btn = QPushButton("✕")
         self.close_btn.setFixedSize(32, 32)
         self.close_btn.setToolTip("Gizle (Kapat)")
@@ -592,22 +685,47 @@ class FlowListApp(QMainWindow):
         header_layout.addLayout(btn_box)
         app_layout.addWidget(self.header_bar)
 
-        # 2. Project Tabs Bar (Scroll Area)
-        tabs_scroll = QScrollArea()
-        tabs_scroll.setWidgetResizable(True)
-        tabs_scroll.setFixedHeight(38)
-        tabs_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        tabs_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        tabs_scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        # 2. Project Bar Container: Fixed '+ Proje Ekle' Button on the Left, Draggable Tabs Scroll on the Right!
+        project_bar_container = QFrame()
+        project_bar_container.setStyleSheet("background: transparent; border: none;")
+        project_bar_layout = QHBoxLayout(project_bar_container)
+        project_bar_layout.setContentsMargins(0, 0, 0, 0)
+        project_bar_layout.setSpacing(8)
 
+        # FIXED '+ Proje Ekle' button on the FAR LEFT (never scrolls away!)
+        self.add_p_btn = QPushButton("+ Proje Ekle")
+        self.add_p_btn.setCursor(Qt.PointingHandCursor)
+        self.add_p_btn.setToolTip("Yeni Bir Proje / Kategori Ekle")
+        self.add_p_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0e1526;
+                color: #38bdf8;
+                border: 1px dashed #2563eb;
+                border-radius: 14px;
+                padding: 5px 12px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #16223b;
+                color: #ffffff;
+                border-color: #38bdf8;
+            }
+        """)
+        self.add_p_btn.clicked.connect(self._prompt_add_project)
+        project_bar_layout.addWidget(self.add_p_btn)
+
+        # Draggable Scroll Area for [Tümü] and Project Tabs
+        self.tabs_scroll = DraggableScrollArea()
         self.tabs_container = QWidget()
         self.tabs_container.setStyleSheet("background: transparent;")
         self.project_tabs_layout = QHBoxLayout(self.tabs_container)
         self.project_tabs_layout.setContentsMargins(0, 0, 0, 0)
         self.project_tabs_layout.setSpacing(6)
-        tabs_scroll.setWidget(self.tabs_container)
+        self.tabs_scroll.setWidget(self.tabs_container)
+        project_bar_layout.addWidget(self.tabs_scroll, 1)
 
-        app_layout.addWidget(tabs_scroll)
+        app_layout.addWidget(project_bar_container)
 
         # 3. Input Section (Pencil Icon Inside + Gradient '+' Button)
         input_row = QHBoxLayout()
@@ -673,7 +791,7 @@ class FlowListApp(QMainWindow):
 
         app_layout.addLayout(input_row)
 
-        # 4. Task List Widget (No horizontal scrollbar)
+        # 4. Task List Widget
         self.task_list_widget = QListWidget()
         self.task_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.task_list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
@@ -751,7 +869,6 @@ class FlowListApp(QMainWindow):
 
         footer_row.addStretch()
 
-        # Corner resize grip
         self.size_grip = QSizeGrip(self)
         self.size_grip.setFixedSize(14, 14)
         self.size_grip.setStyleSheet("background: transparent;")
@@ -845,54 +962,32 @@ class FlowListApp(QMainWindow):
                 w.deleteLater()
 
         # [Tümü] tab
-        all_btn = QPushButton("Tümü")
+        all_btn = ScrollableTabButton("Tümü", self.tabs_scroll)
         all_btn.setCheckable(True)
         all_btn.setChecked(self.current_project == "Tümü")
         all_btn.setCursor(Qt.PointingHandCursor)
-        self._apply_tab_style(all_btn, self.current_project == "Tümü")
+        self._apply_all_tab_style(all_btn, self.current_project == "Tümü")
         all_btn.clicked.connect(lambda: self._select_project("Tümü"))
         self.project_tabs_layout.addWidget(all_btn)
 
-        # User defined Project tabs ONLY (no hardcoded default projects!)
-        for proj in self.task_manager.projects:
-            p_btn = QPushButton(f"🧪 {proj}")
+        # User defined Project tabs with distinct color bullet
+        for idx, proj in enumerate(self.task_manager.projects):
+            bg_col, fg_col = get_project_color(proj, self.task_manager.projects)
+            p_btn = ScrollableTabButton(f"● {proj}", self.tabs_scroll)
             p_btn.setCheckable(True)
-            p_btn.setChecked(self.current_project == proj)
+            is_active = (self.current_project == proj)
+            p_btn.setChecked(is_active)
             p_btn.setCursor(Qt.PointingHandCursor)
-            self._apply_tab_style(p_btn, self.current_project == proj)
+            self._apply_project_tab_style(p_btn, is_active, bg_col, fg_col)
             p_btn.clicked.connect(lambda checked, p=proj: self._select_project(p))
 
-            # Right-click context menu to delete project
             p_btn.setContextMenuPolicy(Qt.CustomContextMenu)
             p_btn.customContextMenuRequested.connect(lambda pos, p=proj: self._show_project_menu(p))
             self.project_tabs_layout.addWidget(p_btn)
 
-        # Dedicated '+ Proje Ekle' button right next to tabs
-        add_p_btn = QPushButton("+ Proje Ekle")
-        add_p_btn.setCursor(Qt.PointingHandCursor)
-        add_p_btn.setToolTip("Yeni Bir Proje / Kategori Ekle")
-        add_p_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0f1523;
-                color: #3b82f6;
-                border: 1px dashed #2563eb;
-                border-radius: 14px;
-                padding: 5px 14px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #162035;
-                color: #60a5fa;
-                border-color: #60a5fa;
-            }
-        """)
-        add_p_btn.clicked.connect(self._prompt_add_project)
-        self.project_tabs_layout.addWidget(add_p_btn)
-
         self.project_tabs_layout.addStretch()
 
-    def _apply_tab_style(self, btn, is_active):
+    def _apply_all_tab_style(self, btn, is_active):
         if is_active:
             btn.setStyleSheet("""
                 QPushButton {
@@ -921,6 +1016,36 @@ class FlowListApp(QMainWindow):
                     color: #93c5fd;
                     border-color: #2563eb;
                 }
+            """)
+
+    def _apply_project_tab_style(self, btn, is_active, bg_col, fg_col):
+        if is_active:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {fg_col};
+                    color: #090d16;
+                    border: 1px solid {fg_col};
+                    border-radius: 14px;
+                    padding: 6px 14px;
+                    font-size: 12px;
+                    font-weight: 800;
+                }}
+            """)
+        else:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #0f1523;
+                    color: {fg_col};
+                    border: 1px solid #1a2438;
+                    border-radius: 14px;
+                    padding: 5px 12px;
+                    font-size: 12px;
+                    font-weight: 600;
+                }}
+                QPushButton:hover {{
+                    background-color: #162035;
+                    border-color: {fg_col};
+                }}
             """)
 
     def _select_project(self, proj_name):
@@ -980,7 +1105,7 @@ class FlowListApp(QMainWindow):
 
         for task in tasks:
             item = QListWidgetItem(self.task_list_widget)
-            item_widget = TaskItemWidget(task)
+            item_widget = TaskItemWidget(task, self.task_manager.projects)
             item_widget.task_toggled.connect(self._on_task_toggled)
             item_widget.task_deleted.connect(self._on_task_deleted)
             item_widget.task_edited.connect(self._on_task_edited)
@@ -1007,7 +1132,6 @@ class FlowListApp(QMainWindow):
         if not title:
             return
 
-        # If on a specific project tab, assign to that project; if on 'Tümü', project is None
         proj = self.current_project if self.current_project != "Tümü" else None
 
         self.task_manager.add_task(title, proj)
