@@ -1,4 +1,4 @@
-﻿import os
+import os
 import subprocess
 import sys
 import shutil
@@ -16,7 +16,7 @@ def build():
         "--noconsole",
         "--onefile",
         "--clean",
-        "--name=FlowList",
+        "--name=TaskFlow",
         "--icon=resources/icon.ico",
         "--add-data=resources;resources",
         "main.py"
@@ -26,7 +26,7 @@ def build():
     result = subprocess.run(cmd)
     
     if result.returncode == 0:
-        exe_path = os.path.abspath("dist/FlowList.exe")
+        exe_path = os.path.abspath("dist/TaskFlow.exe")
         print("\n========================================")
         print("BUILD SUCCESSFUL!")
         print(f"Executable location: {exe_path}")
