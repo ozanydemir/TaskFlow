@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 
 class TaskManager:
-    DEFAULT_PROJECTS = ['Genel', 'İş', 'Kişisel', 'Acil']
+    DEFAULT_PROJECTS = []
     
     def __init__(self, data_file=None):
         if data_file:
@@ -22,18 +22,17 @@ class TaskManager:
                 os.makedirs(save_dir, exist_ok=True)
                 self.data_file = os.path.join(save_dir, 'data.json')
 
-        self.projects = list(self.DEFAULT_PROJECTS)
+        self.projects = []
         self.tasks = []
         self.settings = {
             'always_on_top': False,
-            'autostart': False,
+            'autostart': True,
             'selected_project': 'Tümü'
         }
         self.load()
 
     def load(self):
         if not os.path.exists(self.data_file):
-            # First time load with sample starter tasks
             self._init_defaults()
             self.save()
             return
@@ -41,9 +40,9 @@ class TaskManager:
         try:
             with open(self.data_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                self.projects = data.get('projects', self.DEFAULT_PROJECTS)
-                if 'Genel' not in self.projects:
-                    self.projects.insert(0, 'Genel')
+                self.projects = data.get('projects', [])
+                # Filter out legacy hardcoded sample projects if user hasn't added custom ones
+                # But keep whatever user projects exist
                 self.tasks = data.get('tasks', [])
                 self.settings.update(data.get('settings', {}))
         except Exception as e:
@@ -51,23 +50,8 @@ class TaskManager:
             self._init_defaults()
 
     def _init_defaults(self):
-        self.projects = list(self.DEFAULT_PROJECTS)
-        self.tasks = [
-            {
-                'id': str(uuid.uuid4())[:8],
-                'title': 'FlowList To-Do uygulamasına hoş geldiniz!',
-                'project': 'Genel',
-                'completed': False,
-                'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
-            },
-            {
-                'id': str(uuid.uuid4())[:8],
-                'title': 'Üstteki butonla pencereyi sistem tepsisine gizleyebilirsiniz',
-                'project': 'Genel',
-                'completed': False,
-                'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
-            }
-        ]
+        self.projects = []
+        self.tasks = []
 
     def save(self):
         try:
@@ -84,17 +68,21 @@ class TaskManager:
         except Exception as e:
             print(f'Error saving tasks: {e}')
 
-    def add_task(self, title, project='Genel'):
+    def add_task(self, title, project=None):
         title = title.strip()
         if not title:
             return None
-        if project not in self.projects and project != 'Tümü':
-            self.projects.append(project)
+        
+        proj_val = None
+        if project and project != 'Tümü':
+            proj_val = project.strip()
+            if proj_val and proj_val not in self.projects:
+                self.projects.append(proj_val)
 
         task = {
             'id': str(uuid.uuid4())[:8],
             'title': title,
-            'project': project if project != 'Tümü' else 'Genel',
+            'project': proj_val,
             'completed': False,
             'created_at': datetime.now().strftime('%d.%m.%Y %H:%M')
         }
@@ -145,12 +133,11 @@ class TaskManager:
         return False
 
     def delete_project(self, name):
-        if name in self.projects and name != 'Genel':
+        if name in self.projects:
             self.projects.remove(name)
-            # Reassign deleted project tasks to Genel
             for task in self.tasks:
                 if task.get('project') == name:
-                    task['project'] = 'Genel'
+                    task['project'] = None
             self.save()
             return True
         return False

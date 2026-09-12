@@ -1,7 +1,7 @@
 import os
 import sys
-from PyQt5.QtCore import Qt, QSize, QRectF, pyqtSignal, QPoint
-from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QPen
+from PyQt5.QtCore import Qt, QSize, QRectF, QRect, pyqtSignal, QPoint
+from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QPen, QCursor
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
@@ -21,37 +21,12 @@ def get_resource_path(relative_path):
 
 white_check_path = get_resource_path(os.path.join("resources", "check_mark_white.png")).replace("\\", "/")
 
-# Icon mappings for project names
-PROJECT_ICONS = {
-    'Genel': '💼',
-    'İş': '💻',
-    'Kişisel': '👤',
-    'Acil': '❗',
-    'deneme': '🧪'
-}
-
-def get_project_display_name(name):
-    icon = PROJECT_ICONS.get(name, '🧪')
-    return f"{icon} {name}"
-
-PROJECT_BADGE_STYLES = {
-    'Genel': ('#082029', '#06b6d4', '#06b6d4'),
-    'İş': ('#0c1e38', '#3b82f6', '#3b82f6'),
-    'Kişisel': ('#0a261a', '#10b981', '#10b981'),
-    'Acil': ('#2e1117', '#ef4444', '#ef4444'),
-    'deneme': ('#211136', '#a855f7', '#a855f7')
-}
-
-def get_badge_style(name):
-    if name in PROJECT_BADGE_STYLES:
-        return PROJECT_BADGE_STYLES[name]
-    # Fallback to purple / indigo palette
-    return ('#211136', '#a855f7', '#a855f7')
+BORDER_MARGIN = 8
 
 
 # --- Custom In-Theme Modal Dialogs ---
 class ModernDialog(QDialog):
-    """Sleek dark navy modal dialog matching the theme"""
+    """Sleek dark navy modal dialog matching the exact theme"""
     def __init__(self, title, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Dialog)
@@ -247,13 +222,13 @@ class CircularProgressWidget(QWidget):
         margin = pen_width / 2.0 + 1.2
         rect = QRectF(margin, margin, self.widget_size - 2*margin, self.widget_size - 2*margin)
 
-        # Background track (Dark navy blue)
+        # Background track
         bg_pen = QPen(QColor(19, 27, 46), pen_width)
         bg_pen.setCapStyle(Qt.RoundCap)
         painter.setPen(bg_pen)
         painter.drawArc(rect, 0, 360 * 16)
 
-        # Glowing royal blue progress arc
+        # Foreground royal blue arc
         if self.percentage > 0:
             fg_pen = QPen(QColor(41, 121, 255), pen_width)
             fg_pen.setCapStyle(Qt.RoundCap)
@@ -262,7 +237,7 @@ class CircularProgressWidget(QWidget):
             span_angle = -int(self.percentage * 3.6 * 16)
             painter.drawArc(rect, start_angle, span_angle)
 
-        # Center percentage
+        # Percentage text
         painter.setPen(QColor(255, 255, 255))
         font = QFont("Segoe UI", 8, QFont.Bold)
         painter.setFont(font)
@@ -316,22 +291,31 @@ class TaskItemWidget(QWidget):
         self._update_text_style()
         layout.addWidget(self.title_label)
 
-        # 3. Project Badge (Pill)
-        proj = self.task.get('project', 'Genel')
-        bg_col, fg_col, border_col = get_badge_style(proj)
-        self.badge = QLabel(f" [{proj}] ")
-        self.badge.setStyleSheet(f"""
-            QLabel {{
-                background-color: {bg_col};
-                color: {fg_col};
-                border: 1px solid {border_col};
-                border-radius: 6px;
-                padding: 3px 8px;
-                font-size: 11px;
-                font-weight: 600;
-            }}
-        """)
-        layout.addWidget(self.badge)
+        # 3. Project Badge (Only if project exists)
+        proj = self.task.get('project')
+        if proj:
+            self.badge = QLabel(f" [{proj}] ")
+            # Deterministic color for project
+            h = sum(ord(c) for c in proj) % 4
+            palettes = [
+                ('#211136', '#a855f7', '#a855f7'),
+                ('#0c1e38', '#3b82f6', '#3b82f6'),
+                ('#082029', '#06b6d4', '#06b6d4'),
+                ('#0a261a', '#10b981', '#10b981')
+            ]
+            bg_col, fg_col, border_col = palettes[h]
+            self.badge.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {bg_col};
+                    color: {fg_col};
+                    border: 1px solid {border_col};
+                    border-radius: 6px;
+                    padding: 3px 8px;
+                    font-size: 11px;
+                    font-weight: 600;
+                }}
+            """)
+            layout.addWidget(self.badge)
 
         # 4. Delete button
         self.del_btn = QPushButton("✕")
@@ -402,6 +386,10 @@ class FlowListApp(QMainWindow):
         self.current_project = self.task_manager.settings.get('selected_project', 'Tümü')
         self.start_minimized = start_minimized
 
+        self._resizing_edge = None
+        self._resize_start_pos = QPoint()
+        self._resize_start_geom = QRect()
+
         # Ensure Windows Autostart is active
         try:
             autostart.set_autostart(True)
@@ -429,7 +417,9 @@ class FlowListApp(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.Window)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-        self.setMinimumSize(360, 520)
+        # Set mouse tracking so user can resize freely from all edges
+        self.setMouseTracking(True)
+        self.setMinimumSize(340, 460)
         self.resize(440, 640)
 
         icon_path = get_resource_path(os.path.join("resources", "icon.png"))
@@ -485,6 +475,7 @@ class FlowListApp(QMainWindow):
 
     def _setup_ui(self):
         outer_central = QWidget(self)
+        outer_central.setMouseTracking(True)
         outer_layout = QVBoxLayout(outer_central)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         self.setCentralWidget(outer_central)
@@ -492,6 +483,7 @@ class FlowListApp(QMainWindow):
         # Outer App Card
         self.app_frame = QFrame(outer_central)
         self.app_frame.setObjectName("AppFrame")
+        self.app_frame.setMouseTracking(True)
         self.app_frame.setStyleSheet("""
             QFrame#AppFrame {
                 background-color: #090d16;
@@ -505,7 +497,7 @@ class FlowListApp(QMainWindow):
         app_layout.setContentsMargins(18, 16, 18, 12)
         app_layout.setSpacing(14)
 
-        # 1. Header Bar
+        # 1. Header Bar (Full Draggable Header)
         self.header_bar = DraggableHeader(self)
         self.header_bar.setObjectName("HeaderBar")
         self.header_bar.setStyleSheet("QFrame#HeaderBar { background: transparent; border: none; }")
@@ -515,6 +507,7 @@ class FlowListApp(QMainWindow):
 
         # Circular progress ring
         self.progress_ring = CircularProgressWidget(size=44)
+        self.progress_ring.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         header_layout.addWidget(self.progress_ring)
 
         # Title & Subtitle
@@ -524,10 +517,12 @@ class FlowListApp(QMainWindow):
 
         title_lbl = QLabel('<span style="color:#ffffff; font-size:19px; font-weight:800;">Task</span><span style="color:#3b82f6; font-size:19px; font-weight:800;">Flow</span>')
         title_lbl.setStyleSheet("border: none;")
+        title_lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         title_col.addWidget(title_lbl)
 
         sub_lbl = QLabel("Planla  •  Yap  •  Tamamla")
         sub_lbl.setStyleSheet("color: #5c6f8f; font-size: 11px; font-weight: 500; border: none;")
+        sub_lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         title_col.addWidget(sub_lbl)
 
         header_layout.addLayout(title_col)
@@ -618,7 +613,6 @@ class FlowListApp(QMainWindow):
         input_row = QHBoxLayout()
         input_row.setSpacing(10)
 
-        # Input Box Frame with Pencil Icon
         input_box = QFrame()
         input_box.setFixedHeight(42)
         input_box.setStyleSheet("""
@@ -725,11 +719,10 @@ class FlowListApp(QMainWindow):
         footer_row.setContentsMargins(6, 4, 0, 0)
         footer_row.setSpacing(12)
 
-        self.stats_lbl = QLabel('7 aktif görev')
+        self.stats_lbl = QLabel('0 aktif görev')
         self.stats_lbl.setStyleSheet("border: none;")
         footer_row.addWidget(self.stats_lbl)
 
-        # Vertical separator line
         sep = QFrame()
         sep.setFrameShape(QFrame.VLine)
         sep.setFixedHeight(16)
@@ -766,6 +759,84 @@ class FlowListApp(QMainWindow):
 
         app_layout.addLayout(footer_row)
 
+    # --- Edge and Corner Window Resizing Logic ---
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            edge = self._get_resize_edge(event.pos())
+            if edge != (False, False, False, False):
+                self._resizing_edge = edge
+                self._resize_start_pos = event.globalPos()
+                self._resize_start_geom = self.geometry()
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._resizing_edge:
+            dx = event.globalX() - self._resize_start_pos.x()
+            dy = event.globalY() - self._resize_start_pos.y()
+            new_geom = QRect(self._resize_start_geom)
+
+            left, right, top, bottom = self._resizing_edge
+            min_w = self.minimumWidth()
+            min_h = self.minimumHeight()
+
+            if left:
+                new_left = new_geom.left() + dx
+                if new_geom.right() - new_left >= min_w:
+                    new_geom.setLeft(new_left)
+            if right:
+                new_right = new_geom.right() + dx
+                if new_right - new_geom.left() >= min_w:
+                    new_geom.setRight(new_right)
+            if top:
+                new_top = new_geom.top() + dy
+                if new_geom.bottom() - new_top >= min_h:
+                    new_geom.setTop(new_top)
+            if bottom:
+                new_bottom = new_geom.bottom() + dy
+                if new_bottom - new_geom.top() >= min_h:
+                    new_geom.setBottom(new_bottom)
+
+            self.setGeometry(new_geom)
+            event.accept()
+            return
+        else:
+            edge = self._get_resize_edge(event.pos())
+            self._update_cursor_for_edge(edge)
+
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._resizing_edge = None
+        self.setCursor(Qt.ArrowCursor)
+        super().mouseReleaseEvent(event)
+
+    def _get_resize_edge(self, pos):
+        w = self.width()
+        h = self.height()
+        m = BORDER_MARGIN
+
+        left = pos.x() <= m
+        right = pos.x() >= w - m
+        top = pos.y() <= m
+        bottom = pos.y() >= h - m
+
+        return (left, right, top, bottom)
+
+    def _update_cursor_for_edge(self, edge):
+        left, right, top, bottom = edge
+        if (left and top) or (right and bottom):
+            self.setCursor(Qt.SizeFDiagCursor)
+        elif (right and top) or (left and bottom):
+            self.setCursor(Qt.SizeBDiagCursor)
+        elif left or right:
+            self.setCursor(Qt.SizeHorCursor)
+        elif top or bottom:
+            self.setCursor(Qt.SizeVerCursor)
+        else:
+            self.setCursor(Qt.ArrowCursor)
+
     def _refresh_project_tabs(self):
         while self.project_tabs_layout.count():
             item = self.project_tabs_layout.takeAt(0)
@@ -782,39 +853,38 @@ class FlowListApp(QMainWindow):
         all_btn.clicked.connect(lambda: self._select_project("Tümü"))
         self.project_tabs_layout.addWidget(all_btn)
 
-        # Project tabs with icons
+        # User defined Project tabs ONLY (no hardcoded default projects!)
         for proj in self.task_manager.projects:
-            display_title = get_project_display_name(proj)
-            p_btn = QPushButton(display_title)
+            p_btn = QPushButton(f"🧪 {proj}")
             p_btn.setCheckable(True)
             p_btn.setChecked(self.current_project == proj)
             p_btn.setCursor(Qt.PointingHandCursor)
             self._apply_tab_style(p_btn, self.current_project == proj)
             p_btn.clicked.connect(lambda checked, p=proj: self._select_project(p))
 
-            if proj != 'Genel':
-                p_btn.setContextMenuPolicy(Qt.CustomContextMenu)
-                p_btn.customContextMenuRequested.connect(lambda pos, p=proj: self._show_project_menu(p))
+            # Right-click context menu to delete project
+            p_btn.setContextMenuPolicy(Qt.CustomContextMenu)
+            p_btn.customContextMenuRequested.connect(lambda pos, p=proj: self._show_project_menu(p))
             self.project_tabs_layout.addWidget(p_btn)
 
-        # Add Project Button '+'
-        add_p_btn = QPushButton("+")
+        # Dedicated '+ Proje Ekle' button right next to tabs
+        add_p_btn = QPushButton("+ Proje Ekle")
         add_p_btn.setCursor(Qt.PointingHandCursor)
-        add_p_btn.setToolTip("Yeni Proje Sekmesi Ekle")
+        add_p_btn.setToolTip("Yeni Bir Proje / Kategori Ekle")
         add_p_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0f1523;
-                color: #71829e;
-                border: 1px solid #1a2438;
-                border-radius: 12px;
-                padding: 4px 10px;
-                font-size: 14px;
-                font-weight: bold;
+                color: #3b82f6;
+                border: 1px dashed #2563eb;
+                border-radius: 14px;
+                padding: 5px 14px;
+                font-size: 12px;
+                font-weight: 600;
             }
             QPushButton:hover {
                 background-color: #162035;
-                color: #3b82f6;
-                border-color: #3b82f6;
+                color: #60a5fa;
+                border-color: #60a5fa;
             }
         """)
         add_p_btn.clicked.connect(self._prompt_add_project)
@@ -861,7 +931,7 @@ class FlowListApp(QMainWindow):
         self._refresh_tasks()
 
     def _prompt_add_project(self):
-        dialog = CustomInputDialog("Yeni Proje Sekmesi", "Proje / Kategori adı giriniz:", self)
+        dialog = CustomInputDialog("Yeni Proje", "Yeni proje / kategori adı giriniz:", self)
         if dialog.exec_() == QDialog.Accepted:
             proj_name = dialog.get_text()
             if proj_name:
@@ -896,7 +966,7 @@ class FlowListApp(QMainWindow):
         if action == del_act:
             dialog = CustomConfirmDialog(
                 "Projeyi Sil",
-                f"'{proj_name}' projesini silmek istediğinize emin misiniz?\nİçindeki görevler 'Genel' sekmesine aktarılacaktır.",
+                f"'{proj_name}' projesini silmek istediğinize emin misiniz?\nİçindeki görevler genel listeye aktarılacaktır.",
                 confirm_text="Sil",
                 parent=self
             )
@@ -937,7 +1007,8 @@ class FlowListApp(QMainWindow):
         if not title:
             return
 
-        proj = self.current_project if self.current_project != "Tümü" else "Genel"
+        # If on a specific project tab, assign to that project; if on 'Tümü', project is None
+        proj = self.current_project if self.current_project != "Tümü" else None
 
         self.task_manager.add_task(title, proj)
         self.task_input.clear()
