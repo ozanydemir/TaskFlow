@@ -518,18 +518,25 @@ class FlowListApp(QMainWindow):
         self.setMinimumSize(340, 460)
         self.resize(440, 640)
 
-        icon_path = get_resource_path(os.path.join("resources", "icon.png"))
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
+        # Prioritize multi-resolution icon.ico for native Windows taskbar & tray scaling
+        ico_path = get_resource_path(os.path.join("resources", "icon.ico"))
+        png_path = get_resource_path(os.path.join("resources", "icon.png"))
+        if os.path.exists(ico_path):
+            self.app_icon = QIcon(ico_path)
+        elif os.path.exists(png_path):
+            self.app_icon = QIcon(png_path)
+        else:
+            self.app_icon = QIcon()
+
+        self.setWindowIcon(self.app_icon)
 
         if self.task_manager.settings.get('always_on_top', False):
             self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
 
     def _setup_tray(self):
         self.tray_icon = QSystemTrayIcon(self)
-        icon_path = get_resource_path(os.path.join("resources", "icon.png"))
-        if os.path.exists(icon_path):
-            self.tray_icon.setIcon(QIcon(icon_path))
+        if hasattr(self, 'app_icon') and not self.app_icon.isNull():
+            self.tray_icon.setIcon(self.app_icon)
         else:
             self.tray_icon.setIcon(self.windowIcon())
 

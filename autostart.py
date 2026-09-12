@@ -1,8 +1,9 @@
-﻿import sys
+import sys
 import os
 import winreg
 
-APP_NAME = 'FlowListTodoList'
+APP_NAME = 'TaskFlow'
+LEGACY_APP_NAME = 'FlowListTodoList'
 REG_PATH = r'Software\Microsoft\Windows\CurrentVersion\Run'
 
 def get_app_command():
@@ -32,6 +33,12 @@ def is_autostart_enabled():
 def set_autostart(enable=True):
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, REG_PATH, 0, winreg.KEY_SET_VALUE) as key:
+            # Clean legacy key if present
+            try:
+                winreg.DeleteValue(key, LEGACY_APP_NAME)
+            except FileNotFoundError:
+                pass
+
             if enable:
                 cmd = get_app_command()
                 winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, cmd)
