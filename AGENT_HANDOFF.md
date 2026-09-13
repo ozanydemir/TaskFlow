@@ -91,3 +91,13 @@ Sonraki çalışma TaskFlow klasöründen yapılmalı. Eski boş klasör, onu ç
 - Görünür AppFrame çerçevesi ve `1px` çizgisi değiştirilmedi. `BORDER_MARGIN=16` yalnızca görünmez pointer yakalama alanı olarak kullanılıyor; uygulama genel event filter’ı çocuk widget’ların üzerinde çalıştığı için kenar/köşe sürükleme daha kolay.
 - `python -m unittest test_app -v`: 8 test geçti. Başlangıç ölçüsü, minimum ölçü, genişletilmiş sol kenar hit-test’i ve köşe hit-test’leri doğrulandı. `py_compile` başarılı.
 - Son paket `dist\TaskFlow.exe`: `55,579,303` bayt, SHA256 `D6C576A70533A34CBD08C53C1E1AF1A00074AE767A70D518818E0ACE1BC2D56E`. PyQt iç ölçüsü `440×640`, minimum `340×460`; paket açıldı ve TaskFlow penceresi yanıt verir durumda görüldü.
+
+### 2026-09-14 — Public Windows release
+
+- `ozanydemir/TaskFlow` public yapıldı; release commit’i `f234f58374606e8b5a827ae7de4c3544a3f78f0d` `master` dalına push edildi.
+- `v1.0.0` release: `https://github.com/ozanydemir/TaskFlow/releases/tag/v1.0.0`.
+- `build_installer.py` ve `installer.py` ile oluşturulan `TaskFlowSetup.exe`, `%LOCALAPPDATA%\Programs\TaskFlow` altına yönetici yetkisi olmadan kurulum yapıyor; Desktop ve Start Menu kısayollarını oluşturuyor ve uygulamayı başlatıyor.
+- Geçici profil smoke testinde setup exit code `0`, payload kurulumu ve iki kısayol doğrulandı.
+- Public README ekran görüntüsü sentetik demo projeler kullanıyor. Repo ve geçmiş secret taramasında API anahtarı, `.env`, credential, token veya kişisel görev verisi bulunmadı.
+- Release asset hashleri: `TaskFlow.exe` `D6C576A70533A34CBD08C53C1E1AF1A00074AE767A70D518818E0ACE1BC2D56E`; `TaskFlowSetup.exe` `CC1C8CF3B945E10700118D500845028EBE4A619478A0F60D79D8CE7DD53E8FF5`.
+- OZI Brain güncellemesi `deea212dcd9f10032912bac6b5643aa560c13b1f` olarak `ozan-ai-context/main` dalına push edildi.
