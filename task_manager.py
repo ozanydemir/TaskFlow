@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import uuid
+import shutil
 from datetime import datetime
 
 class TaskManager:
@@ -18,9 +19,15 @@ class TaskManager:
                 self.data_file = local_file
             else:
                 appdata = os.getenv('APPDATA') or os.path.expanduser('~')
-                save_dir = os.path.join(appdata, 'FlowList')
+                save_dir = os.path.join(appdata, 'TaskFlow')
                 os.makedirs(save_dir, exist_ok=True)
                 self.data_file = os.path.join(save_dir, 'data.json')
+                # Copy legacy data once; retain the original as a reversible backup.
+                legacy_file = os.path.join(appdata, 'FlowList', 'data.json')
+                if not os.path.exists(self.data_file) and os.path.exists(legacy_file):
+                    with open(legacy_file, 'r', encoding='utf-8') as legacy:
+                        json.load(legacy)
+                    shutil.copy2(legacy_file, self.data_file)
 
         self.projects = []
         self.tasks = []
@@ -94,6 +101,10 @@ class TaskManager:
         for task in self.tasks:
             if task['id'] == task_id:
                 task['completed'] = not task.get('completed', False)
+                if task['completed']:
+                    task['completed_at'] = datetime.now().strftime('%d.%m.%Y %H:%M')
+                else:
+                    task.pop('completed_at', None)
                 self.save()
                 return task
         return None
@@ -123,6 +134,14 @@ class TaskManager:
         else:
             self.tasks = [t for t in self.tasks if not t.get('completed')]
         self.save()
+
+    def edit_notes(self, task_id, notes):
+        for task in self.tasks:
+            if task['id'] == task_id:
+                task['notes'] = notes.strip()
+                self.save()
+                return True
+        return False
 
     def add_project(self, name):
         name = name.strip()

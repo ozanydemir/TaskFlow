@@ -2,8 +2,17 @@ __pycache__/
 *.pyc
 *.pyo
 dist/
+dist_next/
+dist_smaller/
+dist_tiny/
+dist_installer/
+graphify-out/
 build/
 *.spec
+!TaskFlow.spec
+install_taskflow_update.ps1
+.claudeignore
+.impeccable/
 .vscode/
 test_*.json
 test_run_data.json

@@ -1,59 +1,55 @@
-# TaskFlow — Minimalist Masaüstü Görev Takip Uygulaması 🚀
+# TaskFlow
 
-Aynı anda çok sayıda proje ve iş yürütenler için tasarlanmış; dikkat dağıtmayan, sistem tepsisinde (Windows System Tray) sessizce çalışan, Windows açılışında otomatik başlayabilen, frameless (çerçevesiz) koyu temalı bağımsız bir Windows masaüstü yapılacaklar listesi (`.exe`) uygulaması.
+TaskFlow, Windows için yerel ve proje bazlı bir görev takip uygulamasıdır. Veriler bilgisayarınızda tutulur; uygulama herhangi bir API anahtarı veya çevrim içi hesap gerektirmez.
 
----
+![TaskFlow demo ekranı](design_mockups/taskflow_reference_desktop.png)
 
-## 💎 Temel Özellikler
+Ekran görüntüsü yalnızca herkese açık demo verileri kullanır; kişisel proje adları, görevler veya kullanıcıya ait env dosyaları içermez.
 
-- **Modern Çerçevesiz (Frameless) Tasarım:**
-  - Koyu gece mavisi (`#090d16`) ve siber elektrik mavisi/mor palet.
-  - Windows'un varsayılan beyaz başlık çubuğu kaldırılmıştır; başlığın herhangi bir yerine tıklayıp pencereyi serbestçe sürükleyebilirsiniz.
-  - 8 yönlü özel kenar ve köşe boyutlandırma (resize) desteği.
-- **Konsept 3: Layered Stack 3D Logo & İkon:**
-  - Başlıkta `TaskFlow` yazısının tam başında kristal netliğinde 3D cam onay tiki rozeti.
-  - Windows sistem tepsisinde ("gizli simgeler" alanı) ve görev çubuğunda bozulmayan yerel 32-bit DIB `.ico` paketi.
-- **Çoklu Proje Yönetimi:**
-  - **Sabit `+ Proje Ekle` Butonu:** En solda sabit durur; onlarca proje eklense dahi asla sağa kayıp kaybolmaz.
-  - **Fareyle Sürükleyerek Kaydırma (Drag-to-Scroll):** Proje sekmelerini sol tıkla tutup sağa/sola sürükleyerek veya fare tekerleğiyle yatayda gezinebilirsiniz.
-  - **16 Benzersiz Siber Renk:** Eklediğiniz her yeni projeye ardışık olarak birbirinden farklı parlak neon renk atanır.
-- **Sistem Tepsisine (System Tray) Gizlenme:**
-  - Başlıktaki **`—` (Gizle)** butonuna, **`✕` (Kapat)** butonuna veya **`Esc`** tuşuna basıldığında uygulama kapanmaz; görev çubuğunun sağ altındaki bildirim alanına ("gizli simgeler" / `^`) küçülür.
-  - Tepsi simgesine sol tıklandığında anında ekrana gelir.
-  - Sağ tık menüsü üzerinden doğrudan **Aç / Gizle** ve **Uygulamayı Kapat** yönetilebilir.
-- **Windows Başlangıcında Otomatik Başlama (Autostart):**
-  - Windows Kayıt Defteri (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) üzerinden PC açıldığında sessizce arka planda hazır başlar.
-- **📌 Sabitle (Always on Top):** Üst bardaki raptiye butonu ile kod yazarken görevlerinizin diğer tüm pencerelerin üzerinde sabit kalmasını sağlayabilirsiniz.
-- **Kalıcı & Güvenli Veri:** Görevleriniz `%APPDATA%\FlowList\data.json` içinde tamamen çevrimdışı saklanır.
+## İndir ve kur
 
----
+En güncel Windows paketini [GitHub Releases](https://github.com/ozanydemir/TaskFlow/releases) sayfasından indirin.
 
-## 🚀 Çalıştırma
+1. `TaskFlowSetup.exe` dosyasını çalıştırın.
+2. Kurulum wizard’ı uygulamayı `%LOCALAPPDATA%\Programs\TaskFlow` klasörüne otomatik kurar.
+3. Masaüstü ve Başlat menüsü kısayollarını oluşturur, ardından TaskFlow’u başlatır.
 
-### 1. Masaüstü Kısayolu ile:
-Masaüstünüzde oluşturulan **TaskFlow** kısayoluna çift tıklayarak doğrudan çalıştırabilirsiniz.
+Kurulum yönetici yetkisi gerektirmez. Mevcut bir kurulum varsa uygulama dosyasını günceller; kullanıcı verileri `%APPDATA%\TaskFlow\data.json` içinde korunur.
 
-### 2. Bağımsız EXE Olarak (Kurulum Gerektirmez):
-`dist\TaskFlow.exe` dosyasını çift tıklayarak çalıştırabilirsiniz.
+## Kullanım
 
-### 3. Kaynak Koddan Çalıştırma:
-```bash
+- **Proje Ekle:** Yeni bir proje oluşturur. Sekmelerde fare tekerleği veya sürükleme ile gezinin; üç nokta menüsü tüm projeleri listeler.
+- **Görev ekleme:** Metni yazıp Enter’a veya mavi-mor ekleme butonuna basın.
+- **Görev kartı:** Onay kutusu görevi tamamlar; çift tıklama metni düzenler. Üç nokta menüsünden düzenleme, not ve silme işlemlerine erişin.
+- **Pin:** Pencereyi diğer pencerelerin üzerinde tutar.
+- **Gizle / kapat / Esc:** Uygulamayı sistem tepsisine gizler. Tamamen çıkmak için tepsi menüsündeki **Uygulamayı Kapat** seçeneğini kullanın.
+- **Tamamlananları Temizle:** Seçili projedeki tamamlanan görevleri onay sonrasında siler.
+
+Uygulama eski kompakt ölçüsü olan `440×640` ile açılır, `340×460` ölçüsüne kadar küçültülebilir ve kenar/köşelerden sürüklenerek yeniden boyutlandırılabilir.
+
+## Kaynaktan çalıştırma
+
+```powershell
+python -m pip install PyQt5 pywin32
 python main.py
 ```
 
-### 4. Arka Planda Sessiz Başlatma:
-```bash
-python main.py --minimized
-# veya
-dist\TaskFlow.exe --minimized
-```
+## Windows paketleri oluşturma
 
----
-
-## 🛠️ Yeniden Derleme (Build)
-
-Tek dosya `.exe` ve ikonları derlemek için:
-```bash
+```powershell
+python -m pip install PyInstaller PyQt5 pywin32
 python build_exe.py
+python build_installer.py
 ```
-Çıktı `dist/TaskFlow.exe` konumunda oluşturulacaktır.
+
+Bu komutlar sırasıyla `dist\TaskFlow.exe` ve `dist_installer\TaskFlowSetup.exe` dosyalarını oluşturur. GitHub Actions, `v*` etiketi gönderildiğinde aynı iki dosyayı otomatik olarak Release varlığı olarak ekler.
+
+## Doğrulama
+
+```powershell
+$env:QT_QPA_PLATFORM = 'offscreen'
+python -m unittest test_app -v
+python preview_design.py
+```
+
+Testler geçici verileri kullanır ve Windows başlangıç ayarını değiştirmez. Önizleme aracı gerçek görevleri kullanmadan demo ekran görüntüleri üretir.

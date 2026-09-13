@@ -1,0 +1,38 @@
+name: Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build dependencies
+        run: python -m pip install pyinstaller PyQt5 pywin32
+      - name: Build application
+        run: python build_exe.py
+      - name: Build installer
+        run: python build_installer.py
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: TaskFlow-Windows
+          path: |
+            dist/TaskFlow.exe
+            dist_installer/TaskFlowSetup.exe
+      - name: Attach release assets for tags
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/TaskFlow.exe
+            dist_installer/TaskFlowSetup.exe

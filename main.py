@@ -5,11 +5,11 @@ import ctypes
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
-from app_gui import FlowListApp
+from app_gui import TaskFlowApp
 
 def _log_debug(msg):
     try:
-        log_dir = os.path.join(os.environ.get('APPDATA', '.'), 'FlowList')
+        log_dir = os.path.join(os.environ.get('APPDATA', '.'), 'TaskFlow')
         os.makedirs(log_dir, exist_ok=True)
         with open(os.path.join(log_dir, 'startup_debug.log'), 'a', encoding='utf-8') as f:
             f.write(f"{msg}\n")
@@ -51,9 +51,10 @@ def main():
             _log_debug(f"Mutex warning: {e}")
 
         app = QApplication(sys.argv)
+        app.setApplicationName("TaskFlow")
         app.setQuitOnLastWindowClosed(False)
 
-        window = FlowListApp(start_minimized=args.minimized)
+        window = TaskFlowApp(start_minimized=args.minimized)
         _log_debug("Window initialized and entering event loop.")
         exit_code = app.exec_()
         _log_debug(f"App exited with code: {exit_code}")
