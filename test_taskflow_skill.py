@@ -55,8 +55,8 @@ class TestTaskFlowSkill(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         context = json.loads(result.stdout)
         self.assertEqual(context['project'], 'Demo Örnek')
-        self.assertEqual(Path(context['database']), self.store)
-        self.assertEqual(Path(context['repo_path']), self.repo)
+        self.assertTrue(Path(context['database']).samefile(self.store))
+        self.assertTrue(Path(context['repo_path']).samefile(self.repo))
         self.assertEqual(TaskManager(self.store).tasks, self.original_tasks)
 
     def test_current_repository_is_inferred_from_a_nested_directory(self):
@@ -90,7 +90,7 @@ class TestTaskFlowSkill(unittest.TestCase):
         portable.bind_project('Portable', self.repo)
         result = self.resolve('-Project', 'Portable')
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(Path(json.loads(result.stdout)['database']), self.tools / 'data.sqlite3')
+        self.assertTrue(Path(json.loads(result.stdout)['database']).samefile(self.tools / 'data.sqlite3'))
         self.assertEqual(TaskManager(self.store).tasks, self.original_tasks)
 
     def test_unmigrated_portable_json_does_not_silently_use_another_store(self):

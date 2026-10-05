@@ -75,3 +75,12 @@ Use: after one-time project binding and skill setup, ask the local agent
 "TaskFlow'da bekleyen Demo gorevlerini yap". Status-only requests do not execute
 tasks. Explicit batches still obey the real repository's instructions, exclusive
 claims, evidence requirements and review states. See docs/AGENT_BRIDGE.md.
+
+### Shared skill Windows path follow-up
+
+Windows CI 37282095520 ran all 38 tests: 36 passed and 2 path assertions failed
+because the runner's temporary profile used RUNNER~1 while PowerShell returned
+the same files under the long profile name. Discovery and bridge execution worked.
+Database/repository assertions now verify actual filesystem identity with samefile,
+retaining the selected-store checks across Windows short/long path aliases.
+A new Windows run is required before claiming CI closure for this change.
