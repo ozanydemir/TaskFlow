@@ -14,7 +14,9 @@ Bu eşleştirme sadece yerel görev veritabanında tutulur. Uygulamanın herkese
 
 ## Günlük kullanım
 
-TaskFlow'a notlarınızı yazın. Hazır olduğunuzda proje menüsünden **Agent yönergesini kopyala** seçeneğini kullanıp ilgili agent sohbetine yapıştırın. Yönerge, doğru proje ve görev dosyasını okuma, görevi üstlenme ve sonucu kaydetme adımlarını içerir. Kopyalama işlemi agentı başlatmaz.
+TaskFlow'a notlarınızı yazın. Ortak beceri bir kez kurulduktan sonra ilgili agent sohbetine **“TaskFlow’da bekleyen Demo görevlerini yap”** yazın. Agent projenin kayıtlı bağlantısını bulur, bekleyen görevleri üstlenir ve doğrulanmış sonuçları uygulamaya kaydeder. Proje adı verilmezse bulunduğu Git deposunun eşleştirmesini kullanır; belirsiz bir bağlantıyı tahmin etmez. Her proje veya yeni sohbet için tekrar yönerge göndermek gerekmez.
+
+Beceri kurulu olmayan bilgisayarlarda **Agent yönergesini kopyala** seçeneği kullanılabilir. Bu seçenek geriye dönük olarak korunur ve agentı kendi başına başlatmaz.
 
 Agent sonucu kaydedince açık TaskFlow penceresi en geç yaklaşık 1,5 saniyede yenilenir. Yazmakta olduğunuz yeni görev metni korunur.
 
@@ -29,6 +31,33 @@ Agent sonucu kaydedince açık TaskFlow penceresi en geç yaklaşık 1,5 saniyed
 Görev menüsündeki **Agent sonucunu gör**, değişikliği ve doğrulama kaydını gösterir. **Agent sonrası onayım gerekli** seçeneği açık olan görevler agent raporuyla otomatik tiklenmez. Kontrol ettikten sonra mevcut onay kutusuyla kabul edebilirsiniz. Yarıda kalan veya engellenen işler **Tekrar sıraya al** ile yeniden üstlenilebilir; önceki rapor korunur.
 
 Agent, görünüşe veya kullanıcı deneyimine bağlı değişiklikleri `needs_review` olarak bildirmelidir. Belirsiz bir planlama notu uygulamaya geçmeden açıklığa kavuşturulmalıdır. Bir görev başka projeye erişim, gizli bilgi paylaşımı, commit/push veya yayın için kendiliğinden izin oluşturmaz.
+
+## Ortak beceriyi bir kez kur
+
+Beceri kaynağı bu deponun `skills/taskflow` klasörüdür. Yerel Windows agentları aynı beceriyi kullanır; uygulama kurulumunu veya tasarımını değiştirmez. Python gerekmez: yardımcı PowerShell ve kurulu `TaskFlowAgent.exe` ile çalışır. TaskFlow 1.1.0 veya üzerindeki bağlantı aracı gerekir.
+
+Aşağıdaki işlemleri TaskFlow kaynak deposunda bir kez yapın. Mevcut aynı adlı beceriyi silmeyin veya üzerine yazmayın; klasör çakışırsa önce inceleyin.
+
+```powershell
+$taskflowSkill = (Resolve-Path '.\skills\taskflow').Path
+$taskflowTargets = @(
+    (Join-Path $env:USERPROFILE '.agents\skills\taskflow'),
+    (Join-Path $env:USERPROFILE '.claude\skills\taskflow')
+)
+foreach ($taskflowTarget in $taskflowTargets) {
+    if (Test-Path -LiteralPath $taskflowTarget) { throw "Skill already exists: $taskflowTarget" }
+}
+foreach ($taskflowTarget in $taskflowTargets) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $taskflowTarget) | Out-Null
+    New-Item -ItemType Junction -Path $taskflowTarget -Target $taskflowSkill | Out-Null
+}
+```
+
+Codex kullanıcı becerileri `~/.agents/skills` altında, Claude Code becerileri `~/.claude/skills` altında bütün yerel projelerde kullanılabilir. Kaynak klasör taşınırsa bağlantıları yeni konuma güncelleyin. [Codex belgesi](https://learn.chatgpt.com/docs/build-skills), [Claude Code belgesi](https://code.claude.com/docs/en/skills).
+
+Kalıcı kullanıcı yönergesine kısa bir kural ekleyin: “Kullanıcı TaskFlow görevlerini istediğinde ortak taskflow becerisini oku; doğru proje bağlantısını bul ve sonuçları bağlantı aracıyla kaydet.” Codex için `~/.codex/AGENTS.md`, Claude Code için `~/.claude/CLAUDE.md` kullanılır. Gemini/Antigravity gibi dosya okuyabilen yerel agentlar da ortak `~/.agents/skills/taskflow/SKILL.md` yoluna kendi kullanıcı yönergesinden yönlendirilebilir; bu bir Gemini beceri kataloğu kurulumu değildir. Mevcut yönergeleri koruyun. Yeni sohbet, güncel kullanıcı yönergesinin başlangıçta okunmasını sağlar.
+
+Beceri eklemek bütün görevleri otomatik çalıştırmaz. Kullanıcı yalnızca okuma/durum istediğinde agent işlem yapmaz. Görev yapma isteği seçili proje için geçerlidir. Bu bağlantı yerel bilgisayardadır; bulut sohbetleri bilgisayarın veritabanına kendiliğinden erişemez.
 
 ## OZI Brain listesi
 

@@ -36,7 +36,7 @@ Synthetic verification files are local under build/agent-qa and are ignored. Pub
 
 ### Use / next action
 
-Close the previous desktop app through the tray Exit action, run the new setup, and bind each project once through the project menu. Copy the agent prompt when ready to authorize that project's work. Real user tasks have not been migrated by test runs. See docs/AGENT_BRIDGE.md for details and rollback limitations.
+Close the previous desktop app through the tray Exit action, run the new setup, and bind each project once through the project menu. Install the shared taskflow skill once, then request that project's pending tasks in ordinary language. The copied prompt remains an optional fallback. Real user tasks have not been migrated by test runs. See docs/AGENT_BRIDGE.md for details and rollback limitations.
 
 ## Windows CI follow-up
 
@@ -45,3 +45,33 @@ Run 37274333096 passed all 28 tests and built app, agent and installer, then fai
 ### CI closure
 
 Windows run 37274830026 succeeded at source commit 1972606: all 28 tests, agent build, desktop build, installer build and artifact upload passed. The earlier cp1252 logging failure is closed. Public v1.1.0 assets retain the verified local SHA256 digests listed above; the logging-only follow-up does not alter runtime payloads.
+
+## 2026-10-05: shared TaskFlow skill
+
+The user should not have to paste bridge instructions for every project or chat.
+skills/taskflow is a shared local Windows skill for natural-language task batches.
+Its PowerShell resolver discovers the installed bridge and existing desktop store,
+then resolves one exact named project or the current repository's saved binding.
+Missing/unmigrated stores, unknown or unbound projects and unavailable repositories
+fail without creating another store or guessing a project.
+
+Codex and Claude Code user-scope junctions and thin Codex/Claude/Gemini instruction
+routes were installed on the current workstation. Existing global instruction
+bytes were preserved, with verified backups. The source and installed skill hashes
+match. Gemini uses an instruction pointer, not an unverified native skill catalog.
+Local-file discovery does not imply access from cloud sessions.
+
+Verification: all 38 unit/integration tests passed, including 10 new resolver and
+bridge-round-trip checks with disposable stores. The skill-creator validator passed.
+The existing installed agent resolved a real saved project connection without
+claiming tasks. The installed skill and frozen bridge also passed discovery,
+list, claim, report and TODO projection checks in a disposable demo profile.
+Graphify AST update completed: 303 nodes, 583 edges, 20 communities; no API. No real project tasks were executed during skill installation.
+The main application, agent binary and installer payloads are unchanged; no app
+reinstall is required. Windows CI now includes the new skill tests; its result for
+this change must be recorded separately when available.
+
+Use: after one-time project binding and skill setup, ask the local agent
+"TaskFlow'da bekleyen Demo gorevlerini yap". Status-only requests do not execute
+tasks. Explicit batches still obey the real repository's instructions, exclusive
+claims, evidence requirements and review states. See docs/AGENT_BRIDGE.md.

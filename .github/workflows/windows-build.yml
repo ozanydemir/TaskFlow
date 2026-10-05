@@ -21,7 +21,7 @@ jobs:
       - name: Verify task storage and agent bridge
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest test_app test_agent_bridge -v
+        run: python -m unittest test_app test_agent_bridge test_taskflow_skill -v
       - name: Build agent bridge
         run: python build_agent.py
       - name: Build application

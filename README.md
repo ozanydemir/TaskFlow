@@ -29,7 +29,7 @@ Uygulama eski kompakt ölçüsü olan `440×640` ile açılır, `340×460` ölç
 
 ## Agent bağlantısı
 
-Görevleri biriktirin, proje menüsünden **Agent bağlantısını ayarla** ile yerel depo ve isteğe bağlı OZI Brain proje klasörünü seçin. Hazır olduğunuzda **Agent yönergesini kopyala** seçeneğiyle ilgili agent sohbetini başlatın. Agent sonucu açık uygulamada otomatik görünür; onay gerektiren işler tiklenmeden sizi bekler. OZI Brain `TODO.md` dosyasındaki TaskFlow bölümü aynı kayıtlardan güncellenir.
+Görevleri biriktirin, proje menüsünden **Agent bağlantısını ayarla** ile yerel depo ve isteğe bağlı OZI Brain proje klasörünü seçin. Ortak `taskflow` becerisini bir kez kurduktan sonra agent sohbetine **“TaskFlow’da bekleyen Demo görevlerini yap”** yazmanız yeterlidir. Proje belirtilmezse agent bulunduğu deponun bağlantısını kullanır. Yönerge kopyalamak gerekmez; mevcut kopyalama seçeneği beceri kurulmamış ortamlarda kullanılabilir. Agent sonucu açık uygulamada otomatik görünür; onay gerektiren işler tiklenmeden sizi bekler. OZI Brain `TODO.md` dosyasındaki TaskFlow bölümü aynı kayıtlardan güncellenir.
 
 Görev eklemek agent çalıştırmaz. Ek bir API veya ücretli servis gerekmez. [Kurulum ve çalışma ayrıntıları](docs/AGENT_BRIDGE.md).
 
@@ -55,7 +55,7 @@ Bu komutlar `dist_agent\TaskFlowAgent.exe`, `dist\TaskFlow.exe` ve iki aracı i�
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_app test_agent_bridge -v
+python -m unittest test_app test_agent_bridge test_taskflow_skill -v
 python preview_design.py
 ```
 
