@@ -98,7 +98,12 @@ try {
         throw 'This project has no agent connection. Save its repository connection in TaskFlow first.'
     }
     $boundRepo = ExistingRepo $selected.binding.repo_path
+    # Help does not open the store. Keep the shared skill usable with older installations.
+    $reportHelp = & $AgentPath report --help
+    if ($LASTEXITCODE -ne 0) { throw 'TaskFlow could not read its report capabilities.' }
+    $supportsDelivery = (($reportHelp -join [Environment]::NewLine) -match '--delivery')
     [ordered]@{
+        supports_delivery = $supportsDelivery
         agent_path = $AgentPath
         database = $Database
         project = $selected.name

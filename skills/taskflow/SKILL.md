@@ -18,8 +18,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File '<skill-directory>\scrip
 
 If the user names no project, omit `-Project` and use `-Repo '<current workspace>'`.
 The script matches the current Git root to exactly one saved project binding.
-It returns JSON with `agent_path`, `database`, `project`, `repo_path`, and
-`brain_dir`. It reads connection metadata only; it does not claim tasks.
+It returns JSON with `agent_path`, `database`, `project`, `repo_path`,
+`brain_dir`, and `supports_delivery`. It reads connection metadata only; it does not claim tasks.
 
 The installed agent is discovered under `%LOCALAPPDATA%\Programs\TaskFlow`.
 The database follows the desktop's portable-first, then `%APPDATA%\TaskFlow`
@@ -67,6 +67,19 @@ missing item and have the user save that project's connection in TaskFlow.
    & '<agent_path>' --db '<database>' report --project '<project>' --repo '<repo_path>' --id '<id>' --revision <claimed-revision> --token '<claim_token>' --status completed --summary '<concrete change>' --evidence '<actual verification>'
    ```
 
+   If `supports_delivery` is true, add `--delivery local` for verified changes
+   that exist only locally. Use `--delivery published` only when publication was
+   authorized and its actual destination was verified; include that evidence.
+   Use `--delivery not_applicable` for work that requires no publication. A task
+   being completed never grants permission to push or deploy. If the installed
+   bridge is older, omit the new flag and describe delivery scope in summary and
+   evidence; explain that archive/history features require the updated setup.
+
+   With a supported new bridge, to record a later authorized and verified publication
+   of an already completed task, refresh its revision and use `publish --project <project> --repo <repo>
+   --id <id> --revision <current-revision> --evidence <actual-publication-check>`
+   with the same agent/database prefix. This records evidence; it never deploys.
+
    Use `completed` only for verified work. Use `needs_review` when visual or user
    acceptance is outstanding; explicit review-required tasks also remain unticked.
    Use `blocked` for a concrete obstacle with an honest summary. Never invent
@@ -74,8 +87,12 @@ missing item and have the user save that project's connection in TaskFlow.
    refresh and respect the user's change. Do not overwrite or silently reclaim.
 6. Summarize the finished, review and blocked items. Mention projection warnings.
    The open app refreshes automatically. Do not write raw SQLite or the managed
-   OZI TODO section. The bridge maintains that projection; repo handoff and OZI
-   factual closeout still follow the current project's normal rules.
+   OZI TODO or history sections. The bridge maintains that projection; repo handoff and OZI
+   factual closeout still follow the current project's normal rules. New bridges
+   retain report events in SQLite and mirror them to `TASKFLOW_HISTORY.md`;
+   archiving or deleting a task does not remove those historical results.
+   `list --archived` reads archived tasks; `history --project <project>` reads
+   report/change events. These are read operations, not execution requests.
 
 This is a shared local skill. It grants no unattended scheduling, autonomous
 agent launch, Git push or deployment authority beyond the user's current scope.

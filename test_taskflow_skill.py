@@ -55,6 +55,7 @@ class TestTaskFlowSkill(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         context = json.loads(result.stdout)
         self.assertEqual(context['project'], 'Demo Örnek')
+        self.assertTrue(context['supports_delivery'])
         self.assertTrue(Path(context['database']).samefile(self.store))
         self.assertTrue(Path(context['repo_path']).samefile(self.repo))
         self.assertEqual(TaskManager(self.store).tasks, self.original_tasks)

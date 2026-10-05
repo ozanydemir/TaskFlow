@@ -61,7 +61,8 @@ class TestTaskFlow(unittest.TestCase):
 
         # 6. Clear completed
         self.tm.clear_completed("Tümü")
-        self.assertFalse(any(t['id'] == t1['id'] for t in self.tm.tasks))
+        self.assertFalse(any(t['id'] == t1['id'] for t in self.tm.get_tasks()))
+        self.assertTrue(any(t['id'] == t1['id'] for t in self.tm.get_tasks(archived=True)))
 
     def test_project_operations(self):
         self.tm.add_project("YeniProje123")

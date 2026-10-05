@@ -91,3 +91,53 @@ Windows run 37282414754 succeeded at 24faebb: all 38 tests, bridge/app/installer
 builds and artifact upload passed. The short/long path assertion failure is closed.
 Latest Graphify AST map has 304 nodes, 584 edges and 20 communities. This closeout
 changes documentation only; the tested source and installed skill remain unchanged.
+
+## 2026-10-05: reversible archives and delivery-aware results
+
+Completed tasks now leave the active list through archiving. Archive entries retain
+IDs, notes, completion dates, results and report history; restoring returns the
+completed task without requeueing it. Project and overflow menus open the archive.
+The footer action uses a short label at the minimum window width.
+
+Verified local work is labeled separately from verified publication. Reports accept
+local, published or not_applicable delivery scope; new reports default to local.
+Legacy task payloads and their unknown delivery scope are preserved. Publication
+records require evidence, a current revision and the mapped project/repo, and never
+perform deployment. User-review tasks remain unticked even if publication is recorded.
+Requeueing resets current delivery scope while retaining its historical evidence.
+
+An additive SQLite event journal retains results across task deletion and project
+unbinding. Existing reports are imported once without altering task payloads or
+settings. Optional TASKFLOW_HISTORY.md projection preserves manual notes and uses
+project UUID markers. The active TODO view excludes archives. Projection errors
+preserve the primary data and can be retried without duplicate events. This journal
+does not replace repo handoff or private project closeout. Previously deleted results
+cannot be recovered. Old app versions do not understand archives; do not use old and
+new versions simultaneously with the same store.
+
+Verification:
+- All 51 tests passed, including 13 archive/delivery/history regression checks.
+- Shared skill validation passed; source and both installed skill junction hashes match.
+- The resolver detects delivery support through help, retaining old-bridge compatibility.
+- At 440x640 and 340x460 the main content matches the prior revision pixel-for-pixel;
+  the intentionally renamed footer action is excluded from that comparison. Archive
+  dialog and minimum-width action were visually inspected with synthetic data.
+- Frozen application and agent passed the delivery/archive/restore/history lifecycle
+  with disposable stores. No real tasks, bindings, startup settings or running app
+  were altered. Real-profile installation is not claimed.
+- Installer payload hashes match the tested binaries. The actual extracted payloads
+  were copied into a disposable installation; shortcut requests were mocked.
+- Graphify AST update: 340 nodes, 689 edges, 20 communities; generated output stays
+  ignored and no API/LLM was used. Community labels used the deterministic hub fallback.
+- Windows CI includes these tests and frozen GUI verification; fresh CI result pending.
+
+Local verified artifacts:
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist_next/TaskFlow.exe | 56301346 | afdaa67f73812873021976592f737dee59a3b5408fc8bf6527f12f54e2c7d311 |
+| dist_agent/TaskFlowAgent.exe | 9613019 | 8dca8d9fe5041fb47c1e9f460d5bcf02c37eed59c16fe9266094196ca0f9d43f |
+| dist_installer/TaskFlowSetup.exe | 80857684 | df0b6aa748445b4c72807a814890cdd8237ffe3bc447bcb180f0424bae0dcd8c |
+
+Use the new setup after exiting the old app through the tray. Existing local data
+and saved project connections are retained. Shared skill updates are already visible
+through the installed junctions; the new runtime features require the new setup.

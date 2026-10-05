@@ -38,6 +38,22 @@ def _verify_build(report_file):
         app.processEvents()
         card = window.task_list_widget.itemWidget(window.task_list_widget.item(0))
         assert card.checkbox.isChecked()
+        assert card.date_label.text().startswith('Yerelde tamamlandı')
+        completed = external.get_tasks('Demo')[0]
+        published = external.mark_published('Demo', task['id'], completed['revision'], 'Synthetic deployment check')
+        external.archive_completed('Demo')
+        window._poll_external_changes()
+        assert window.task_list_widget.count() == 0
+        from app_gui import TaskArchiveDialog
+        archive = TaskArchiveDialog(manager, 'Demo', window)
+        assert archive.list.count() == 1
+        assert 'Synthetic verification' in archive.details.toPlainText()
+        archive._restore()
+        window._refresh_tasks()
+        assert window.task_list_widget.count() == 1
+        assert manager.get_tasks('Demo')[0]['delivery'] == 'published'
+        assert len(manager.get_history('Demo')) == 4
+        archive.deleteLater()
         assert (window.width(), window.height()) == (440, 640)
         assert Path(getattr(sys, '_MEIPASS', Path(__file__).parent), 'resources', 'icon.ico').is_file()
         window.sync_timer.stop()
@@ -45,7 +61,8 @@ def _verify_build(report_file):
         window.deleteLater()
         app.processEvents()
     Path(report_file).write_text(json.dumps({'ok': True, 'checks': ['frozen GUI', 'SQLite', 'external result refresh',
-                                                                  'compact dimensions', 'bundled icon']}), encoding='utf-8')
+                                                                  'compact dimensions', 'bundled icon', 'delivery state',
+                                                                  'archive and restore', 'persistent journal']}), encoding='utf-8')
 
 
 def main():

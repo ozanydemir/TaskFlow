@@ -424,6 +424,7 @@ class TaskItemWidget(QFrame):
     task_noted = pyqtSignal(str, str)
     task_requeued = pyqtSignal(str)
     task_review_changed = pyqtSignal(str, bool)
+    task_publication = pyqtSignal(str, int, str)
 
     def __init__(self, task, project_list, parent=None):
         super().__init__(parent)
@@ -482,11 +483,11 @@ class TaskItemWidget(QFrame):
         except ValueError:
             date_text = date.split(' ')[0]
         if task.get('completed'):
-            date_text = 'Tamamlandı' + ('  ·  ' + date_text if date_text else '')
+            label = {'local': 'Yerelde tamamlandı', 'published': 'Yayınlandı'}.get(task.get('delivery'), 'Tamamlandı')
+            date_text = label + ('  ·  ' + date_text if date_text else '')
         status_text = {'in_progress': 'Agent çalışıyor', 'needs_review': 'Kontrolünü bekliyor', 'blocked': 'Engellendi'}.get(task.get('status'))
         self.date_label = QLabel(status_text or date_text)
-        if task.get('result'):
-            self.date_label.setToolTip(task['result']['summary'])
+        self.date_label.setToolTip(TaskManager.delivery_label(task) + ('\n' + task['result']['summary'] if task.get('result') else ''))
         self.date_label.setStyleSheet('color: #96add4; font-size: 11px;')
         self.metadata.addWidget(self.date_label)
         self.note_btn = QPushButton()
@@ -568,6 +569,7 @@ class TaskItemWidget(QFrame):
         edit = menu.addAction('Görevi düzenle')
         note = menu.addAction('Notu düzenle')
         result = menu.addAction('Agent sonucunu gör') if self.task.get('result') else None
+        publication = menu.addAction('Yayın doğrulamasını kaydet') if self.task.get('status') in {'completed', 'needs_review'} else None
         review = menu.addAction('Agent sonrası onayım gerekli')
         review.setCheckable(True)
         review.setChecked(self.task.get('review_required', False))
@@ -583,6 +585,10 @@ class TaskItemWidget(QFrame):
             self.task_deleted.emit(self.task['id'])
         elif result is not None and action == result:
             self._show_agent_result()
+        elif publication is not None and action == publication:
+            dialog = CustomInputDialog('Yayın doğrulaması', 'Gerçekleşen yayının adresini veya doğrulama kaydını yazın:', self)
+            if dialog.exec_() == QDialog.Accepted and dialog.get_text():
+                self.task_publication.emit(self.task['id'], self.task['revision'], dialog.get_text())
         elif action == review:
             self.task_review_changed.emit(self.task['id'], review.isChecked())
         elif requeue is not None and action == requeue:
@@ -594,8 +600,13 @@ class TaskItemWidget(QFrame):
         result = self.task['result']
         text = QTextEdit()
         text.setReadOnly(True)
-        text.setPlainText('Yapılan işlem:\n' + result['summary'] + '\n\nDoğrulama:\n' +
-                          (result['evidence'] or 'Doğrulama kaydı yok.') + '\n\n' + result['reported_at'])
+        entries = ['Yayın durumu: ' + TaskManager.delivery_label(self.task)]
+        if self.task.get('publication_evidence'):
+            entries.append('Yayın doğrulaması: ' + self.task['publication_evidence'])
+        for report in self.task.get('history', []) or [result]:
+            entries.append(report['reported_at'] + '\nYapılan işlem:\n' + report['summary'] +
+                           '\n\nDoğrulama:\n' + (report['evidence'] or 'Doğrulama kaydı yok.'))
+        text.setPlainText('\n\n'.join(entries))
         text.setStyleSheet('background: #0e1422; color: #d4e2ff; border: 1px solid #304461; font-size: 12px;')
         dialog.card_layout.addWidget(text)
         close = QPushButton('Kapat')
@@ -627,6 +638,71 @@ class DraggableHeader(QFrame):
 
     def mouseReleaseEvent(self, event):
         self._drag_pos = None
+
+
+class TaskArchiveDialog(ModernDialog):
+    def __init__(self, manager, project, parent=None):
+        super().__init__('Arşiv · ' + project, parent)
+        self.manager, self.project = manager, project
+        self.resize(420, 500)
+        self.setStyleSheet('QListWidget, QTextEdit { background: #0e1422; color: #d4e2ff; '
+                          'border: 1px solid #304461; border-radius: 6px; font-size: 12px; } '
+                          'QListWidget::item { padding: 6px; } '
+                          'QListWidget::item:selected { background: #22334e; } '
+                          'QPushButton { background: #2563eb; color: white; border-radius: 8px; '
+                          'padding: 6px 16px; font-size: 12px; } '
+                          'QPushButton:disabled { background: #162035; color: #96add4; }')
+        self.list = QListWidget()
+        self.list.setAccessibleName('Arşivlenen görevler')
+        self.card_layout.addWidget(self.list, 1)
+        self.details = QTextEdit()
+        self.details.setReadOnly(True)
+        self.details.setAccessibleName('Arşivlenen görev sonucu ve geçmişi')
+        self.card_layout.addWidget(self.details, 1)
+        buttons = QHBoxLayout()
+        self.restore_btn = QPushButton('Geri getir')
+        self.restore_btn.clicked.connect(self._restore)
+        buttons.addWidget(self.restore_btn)
+        close = QPushButton('Kapat')
+        close.clicked.connect(self.accept)
+        buttons.addWidget(close)
+        self.card_layout.addLayout(buttons)
+        self.list.currentItemChanged.connect(self._select)
+        self._reload()
+
+    def _reload(self):
+        self.manager.reload_if_changed()
+        self.list.clear()
+        self.tasks = self.manager.get_tasks(self.project, archived=True)
+        for task in self.tasks:
+            item = QListWidgetItem(task['title'])
+            item.setData(Qt.UserRole, task['id'])
+            self.list.addItem(item)
+        if self.tasks:
+            self.list.setCurrentRow(0)
+        else:
+            self.details.setPlainText('Bu listede arşivlenen görev yok.\nTamamlananları Arşivle ile görevleri buraya taşıyabilirsiniz.')
+            self.restore_btn.setEnabled(False)
+
+    def _select(self, item, previous=None):
+        task = next((t for t in self.tasks if item and t['id'] == item.data(Qt.UserRole)), None)
+        self.restore_btn.setEnabled(task is not None)
+        if not task:
+            return
+        entries = [task['title'], TaskManager.delivery_label(task), 'Arşiv tarihi: ' + task['archived_at']]
+        if task.get('notes'):
+            entries.append('Not: ' + task['notes'])
+        if task.get('publication_evidence'):
+            entries.append('Yayın doğrulaması: ' + task['publication_evidence'])
+        for result in task.get('history', []) or ([task['result']] if task.get('result') else []):
+            entries.append(result['reported_at'] + '\n' + result['summary'] + '\nDoğrulama: ' + result['evidence'])
+        self.details.setPlainText('\n\n'.join(entries))
+
+    def _restore(self):
+        item = self.list.currentItem()
+        if item:
+            self.manager.restore_task(item.data(Qt.UserRole))
+            self._reload()
 
 
 # --- Main Application Window ---
@@ -933,7 +1009,8 @@ class TaskFlowApp(QMainWindow):
         sep.setFixedSize(1, 16)
         sep.setStyleSheet('background: #314668; border: none;')
         footer.addWidget(sep)
-        self.clear_btn = QPushButton('Tamamlananları Temizle')
+        self.clear_btn = QPushButton('Tamamlananları Arşivle')
+        self.clear_btn.setToolTip('Tamamlananları Arşivle · Sonuçlar korunur')
         self.clear_btn.setIcon(make_icon('check'))
         self.clear_btn.setIconSize(QSize(18, 18))
         self.clear_btn.setCursor(Qt.PointingHandCursor)
@@ -968,6 +1045,9 @@ class TaskFlowApp(QMainWindow):
             prompt = menu.addAction('Agent yönergesini kopyala')
             prompt.setEnabled(self.current_project in self.task_manager.bindings)
             prompt.triggered.connect(lambda: self._copy_agent_prompt(self.current_project))
+        menu.addSeparator()
+        archive = menu.addAction('Arşivlenen görevler')
+        archive.triggered.connect(self._show_archive)
         menu.exec_(self.projects_menu_btn.mapToGlobal(self.projects_menu_btn.rect().bottomLeft()))
 
     def resizeEvent(self, event):
@@ -978,6 +1058,8 @@ class TaskFlowApp(QMainWindow):
             self.title_lbl.setStyleSheet('font-size: 19px; font-weight: 800;')
             self.header_motto.setVisible(not compact)
             self.footer_motto.setVisible(self.width() >= 1000)
+            if hasattr(self, 'clear_btn'):
+                self.clear_btn.setText('Arşivle' if self.width() < 400 else 'Tamamlananları Arşivle')
             QTimer.singleShot(0, self._resize_task_cards)
 
     def _resize_task_cards(self):
@@ -1174,13 +1256,16 @@ class TaskFlowApp(QMainWindow):
     def _show_project_menu(self, proj_name):
         menu = QMenu(self)
         menu.setStyleSheet(MENU_STYLE)
+        archive_act = menu.addAction('Arşivlenen görevler')
         bind_act = menu.addAction('Agent bağlantısını ayarla')
         prompt_act = menu.addAction('Agent yönergesini kopyala')
         prompt_act.setEnabled(proj_name in self.task_manager.bindings)
         menu.addSeparator()
         del_act = menu.addAction(f"'{proj_name}' Projesini Sil")
         action = menu.exec_(self.cursor().pos())
-        if action == bind_act:
+        if action == archive_act:
+            self._show_archive(proj_name)
+        elif action == bind_act:
             self._configure_connection(proj_name)
         elif action == prompt_act:
             self._copy_agent_prompt(proj_name)
@@ -1241,6 +1326,16 @@ class TaskFlowApp(QMainWindow):
         self.task_manager.requeue_task(task_id)
         self._refresh_tasks()
 
+    def _on_task_publication(self, task_id, revision, evidence):
+        task = next((t for t in self.task_manager.tasks if t['id'] == task_id), None)
+        if task:
+            try:
+                self.task_manager.mark_published(task.get('project'), task_id, revision, evidence)
+            except (ValueError, OSError, sqlite3.Error) as exc:
+                CustomConfirmDialog('Yayın kaydedilemedi', str(exc), confirm_text='Tamam',
+                                    is_destructive=False, parent=self).exec_()
+            self._refresh_tasks()
+
     def _on_task_review_changed(self, task_id, required):
         self.task_manager.set_review_required(task_id, required)
         self._refresh_tasks()
@@ -1258,6 +1353,7 @@ class TaskFlowApp(QMainWindow):
             item_widget.task_noted.connect(self._on_task_noted)
             item_widget.task_requeued.connect(self._on_task_requeued)
             item_widget.task_review_changed.connect(self._on_task_review_changed)
+            item_widget.task_publication.connect(self._on_task_publication)
 
             width = max(100, self.task_list_widget.viewport().width() - 18)
             item.setSizeHint(QSize(width, item_widget.fit_to_width(width)))
@@ -1302,20 +1398,25 @@ class TaskFlowApp(QMainWindow):
         self.task_manager.edit_task(task_id, new_title)
         self._refresh_tasks()
 
+    def _show_archive(self, project=None):
+        dialog = TaskArchiveDialog(self.task_manager, project or self.current_project, self)
+        dialog.exec_()
+        self._refresh_tasks()
+
     def _confirm_clear_completed(self):
         total, completed = self.task_manager.get_stats(self.current_project)
         if completed == 0:
             return
 
         dialog = CustomConfirmDialog(
-            "Tamamlananları Temizle",
-            f"Tamamlanmış olan {completed} görevi silmek istediğinize emin misiniz?",
-            confirm_text="Temizle",
-            is_destructive=True,
+            "Tamamlananları Arşivle",
+            f"{completed} tamamlanmış görev arşive taşınacak.\nSonuçlar korunur; görevleri arşivden geri getirebilirsiniz.",
+            confirm_text="Arşivle",
+            is_destructive=False,
             parent=self
         )
         if dialog.exec_() == QDialog.Accepted:
-            self.task_manager.clear_completed(self.current_project)
+            self.task_manager.archive_completed(self.current_project)
             self._refresh_tasks()
 
     def _toggle_pin(self):

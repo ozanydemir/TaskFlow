@@ -21,6 +21,9 @@ class TaskManager:
     DEFAULT_PROJECTS = []
     DEFAULT_SETTINGS = {'always_on_top': False, 'autostart': True, 'selected_project': 'Tümü'}
     STATUSES = {'pending', 'in_progress', 'needs_review', 'completed', 'blocked'}
+    DELIVERIES = {'local', 'published', 'not_applicable'}
+    DELIVERY_LABELS = {'local': 'Yerelde tamamlandı', 'published': 'Yayınlandı',
+                       'not_applicable': 'Yayın gerektirmiyor', 'unspecified': 'Yayın durumu belirtilmedi'}
 
     def __init__(self, data_file=None):
         if data_file:
@@ -42,6 +45,7 @@ class TaskManager:
         Path(self.db_file).parent.mkdir(parents=True, exist_ok=True)
         self.sync_errors = []
         self._initialize(source)
+        self._initialize_journal()
         self.load()
 
     @contextmanager
@@ -98,6 +102,47 @@ class TaskManager:
             for key, value in settings.items():
                 conn.execute('INSERT INTO settings VALUES (?,?)', (key, self._json(value)))
             conn.execute("INSERT INTO meta VALUES ('schema','1')")
+
+    def _initialize_journal(self):
+        # Additive v1 migration: preserve all task payloads and settings.
+        with self._connection(write=True, bump=False) as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS task_events '
+                         '(id TEXT PRIMARY KEY, project_id TEXT, task_id TEXT NOT NULL, payload TEXT NOT NULL)')
+            if conn.execute("SELECT 1 FROM meta WHERE key='journal_initialized'").fetchone():
+                return
+            for payload, in conn.execute('SELECT payload FROM tasks').fetchall():
+                task = json.loads(payload)
+                for result in task.get('history', []) or ([task['result']] if task.get('result') else []):
+                    self._record_event(conn, task, 'imported_report', result=result)
+                if task.get('completed') and not task.get('result'):
+                    self._record_event(conn, task, 'imported_completion')
+            conn.execute("INSERT INTO meta VALUES ('journal_initialized','1')")
+
+    def _record_event(self, conn, task, kind, result=None):
+        row = conn.execute('SELECT binding FROM projects WHERE name=?', (task.get('project'),)).fetchone()
+        project_id = json.loads(row[0])['project_id'] if row and row[0] else None
+        snapshot = {k: copy.deepcopy(v) for k, v in task.items() if k not in {'claim_token', 'owner', 'history'}}
+        if result is not None:
+            snapshot['result'] = copy.deepcopy(result)
+            snapshot.update(status=result['status'], completed=result['status'] == 'completed',
+                            delivery=result.get('delivery', 'unspecified'))
+        event = {'id': str(uuid.uuid4()), 'kind': kind, 'recorded_at': self._now(), 'task': snapshot}
+        conn.execute('INSERT INTO task_events VALUES (?,?,?,?)',
+                     (event['id'], project_id, task['id'], self._json(event)))
+
+    def get_history(self, project):
+        with self._connection() as conn:
+            binding = self.bindings.get(project)
+            if binding:
+                rows = conn.execute('SELECT payload FROM task_events WHERE project_id=? ORDER BY rowid',
+                                    (binding['project_id'],))
+            else:
+                rows = conn.execute('SELECT payload FROM task_events WHERE project_id IS NULL ORDER BY rowid')
+            return [event for payload, in rows if (event := json.loads(payload))['task'].get('project') == project]
+
+    @classmethod
+    def delivery_label(cls, task):
+        return cls.DELIVERY_LABELS.get(task.get('delivery', 'unspecified'), cls.DELIVERY_LABELS['unspecified'])
 
     @staticmethod
     def _validate_import(data):
@@ -215,7 +260,7 @@ class TaskManager:
         self._after_write()
         return task
 
-    def _edit(self, task_id, update):
+    def _edit(self, task_id, update, event=None):
         with self._connection(write=True) as conn:
             try:
                 task = self._read_task(conn, task_id)
@@ -226,6 +271,8 @@ class TaskManager:
             task.pop('claim_token', None)
             task.pop('owner', None)
             self._write_task(conn, task)
+            if event:
+                self._record_event(conn, task, event)
         self._after_write()
         return task
 
@@ -237,13 +284,17 @@ class TaskManager:
                 task['completed_at'] = self._now()
             else:
                 task.pop('completed_at', None)
-        return self._edit(task_id, update)
+                task['delivery'] = 'unspecified'
+                task.pop('publication_evidence', None)
+        return self._edit(task_id, update, event='manual_completion')
 
     def requeue_task(self, task_id):
         def update(task):
             task.update(status='pending', completed=False)
             task.pop('completed_at', None)
-        return self._edit(task_id, update)
+            task['delivery'] = 'unspecified'
+            task.pop('publication_evidence', None)
+        return self._edit(task_id, update, event='requeued')
 
     def edit_task(self, task_id, new_title):
         if not new_title.strip():
@@ -270,17 +321,49 @@ class TaskManager:
 
     def delete_task(self, task_id):
         with self._connection(write=True) as conn:
+            row = conn.execute('SELECT payload FROM tasks WHERE id=?', (task_id,)).fetchone()
+            if row:
+                self._record_event(conn, json.loads(row[0]), 'deleted')
             deleted = conn.execute('DELETE FROM tasks WHERE id=?', (task_id,)).rowcount > 0
         self._after_write()
         return deleted
 
-    def clear_completed(self, project_filter=None):
+    def archive_completed(self, project_filter=None):
+        count = 0
         with self._connection(write=True) as conn:
-            for task_id, payload in conn.execute('SELECT id,payload FROM tasks').fetchall():
+            for payload, in conn.execute('SELECT payload FROM tasks').fetchall():
                 task = json.loads(payload)
-                if task.get('completed') and (not project_filter or project_filter == 'Tümü' or task.get('project') == project_filter):
-                    conn.execute('DELETE FROM tasks WHERE id=?', (task_id,))
+                if task.get('completed') and not task.get('archived_at') and (not project_filter or project_filter == 'Tümü' or task.get('project') == project_filter):
+                    task.update(archived_at=self._now(), revision=task['revision'] + 1)
+                    task.pop('claim_token', None)
+                    task.pop('owner', None)
+                    self._write_task(conn, task)
+                    self._record_event(conn, task, 'archived')
+                    count += 1
         self._after_write()
+        return count
+
+    def clear_completed(self, project_filter=None):
+        """Compatibility for callers: clearing is now reversible archiving."""
+        return self.archive_completed(project_filter)
+
+    def restore_task(self, task_id):
+        def update(task):
+            task.pop('archived_at', None)
+        return self._edit(task_id, update, event='restored')
+
+    def mark_published(self, project, task_id, revision, evidence):
+        if not evidence.strip():
+            raise ValueError('Yayınlandı durumu için yayın doğrulaması gerekli.')
+        with self._connection(write=True) as conn:
+            task = self._read_task(conn, task_id, project)
+            if task['revision'] != revision or task['status'] not in {'completed', 'needs_review'}:
+                raise TaskConflict('Görev değişti veya henüz tamamlanmadı.')
+            task.update(delivery='published', publication_evidence=evidence.strip(), revision=revision + 1)
+            self._write_task(conn, task)
+            self._record_event(conn, task, 'published')
+        self._after_write()
+        return task
 
     def add_project(self, name):
         name = name.strip()
@@ -314,8 +397,9 @@ class TaskManager:
         self._after_write()
         return exists
 
-    def get_tasks(self, project_filter=None):
-        return [t for t in self.tasks if not project_filter or project_filter == 'Tümü' or t.get('project') == project_filter]
+    def get_tasks(self, project_filter=None, archived=False):
+        return [t for t in self.tasks if bool(t.get('archived_at')) == archived and
+                (not project_filter or project_filter == 'Tümü' or t.get('project') == project_filter)]
 
     def get_stats(self, project_filter=None):
         tasks = self.get_tasks(project_filter)
@@ -351,6 +435,10 @@ class TaskManager:
                         task.pop('owner', None)
                         self._write_task(conn, task)
             conn.execute('UPDATE projects SET binding=? WHERE name=?', (self._json(binding), project))
+            # Bind pre-connection events once; never move another project's historical journal.
+            for event_id, payload in conn.execute('SELECT id,payload FROM task_events WHERE project_id IS NULL').fetchall():
+                if json.loads(payload)['task'].get('project') == project:
+                    conn.execute('UPDATE task_events SET project_id=? WHERE id=?', (binding['project_id'], event_id))
         self._after_write()
         return binding
 
@@ -359,32 +447,41 @@ class TaskManager:
             raise ValueError('Agent / oturum adı gerekli.')
         with self._connection(write=True) as conn:
             task = self._read_task(conn, task_id, project)
-            if task['revision'] != revision or task['status'] != 'pending':
+            if task.get('archived_at') or task['revision'] != revision or task['status'] != 'pending':
                 raise TaskConflict('Görev değişti veya başka agent tarafından alındı.')
             task.update(status='in_progress', owner=owner.strip(), claim_token=str(uuid.uuid4()), revision=revision + 1)
             self._write_task(conn, task)
         self._after_write()
         return task
 
-    def report_task(self, project, task_id, revision, token, status, summary, evidence=''):
+    def report_task(self, project, task_id, revision, token, status, summary, evidence='', delivery=None):
         if status not in {'completed', 'needs_review', 'blocked', 'pending'} or not summary.strip():
             raise ValueError('Geçerli sonuç durumu ve sonuç açıklaması gerekli.')
         if status == 'completed' and not evidence.strip():
             raise ValueError('Otomatik tamamlama için doğrulama kanıtı gerekli.')
+        if delivery is not None and delivery not in self.DELIVERIES:
+            raise ValueError('Geçerli yayın durumu gerekli.')
+        if delivery is not None and status not in {'completed', 'needs_review'}:
+            raise ValueError('Yayın durumu yalnızca tamamlanan veya kontrol bekleyen sonuçlarda kullanılır.')
+        if delivery == 'published' and not evidence.strip():
+            raise ValueError('Yayınlandı durumu için yayın doğrulaması gerekli.')
         with self._connection(write=True) as conn:
             task = self._read_task(conn, task_id, project)
-            if task['status'] != 'in_progress' or task['revision'] != revision or task.get('claim_token') != token:
+            if task.get('archived_at') or task['status'] != 'in_progress' or task['revision'] != revision or task.get('claim_token') != token:
                 raise TaskConflict('Görev değişti; eski agent sonucu uygulanmadı.')
             if status == 'completed' and task.get('review_required'):
                 status = 'needs_review'
-            result = {'summary': summary.strip(), 'evidence': evidence.strip(), 'reported_at': self._now(), 'owner': task['owner'], 'status': status}
+            delivery = (delivery or 'local') if status in {'completed', 'needs_review'} else 'unspecified'
+            result = {'summary': summary.strip(), 'evidence': evidence.strip(), 'reported_at': self._now(), 'owner': task['owner'], 'status': status, 'delivery': delivery}
             task.setdefault('history', []).append(result)
-            task.update(status=status, completed=status == 'completed', result=result, revision=revision + 1)
+            task.update(status=status, completed=status == 'completed', result=result, delivery=delivery, revision=revision + 1)
+            task.pop('publication_evidence', None)
             task.pop('claim_token', None)
             task.pop('owner', None)
             if task['completed']:
                 task['completed_at'] = self._now()
             self._write_task(conn, task)
+            self._record_event(conn, task, 'report')
         self._after_write()
         return task
 
@@ -408,9 +505,13 @@ class TaskManager:
             tasks = [json.loads(r[0]) for r in conn.execute('SELECT payload FROM tasks ORDER BY position,id')]
             lines = [start, '## TaskFlow görevleri', '', '> Bu bölüm TaskFlow tarafından güncellenir. Görev eklemek agent çalıştırma izni değildir.', '> Sonuçları TaskFlow Agent üzerinden yazın; bu bölümü elle değiştirmeyin.', '']
             for task in tasks:
-                if task.get('project') != project:
+                if task.get('project') != project or task.get('archived_at'):
                     continue
                 lines.append('- [{}] {} — `{}` · {} · rev {}'.format('x' if task['completed'] else ' ', self._md(task['title']), task['id'], task['status'], task['revision']))
+                if task.get('delivery'):
+                    lines.append('  - Yayın: ' + self.delivery_label(task))
+                if task.get('publication_evidence'):
+                    lines.append('  - Yayın kanıtı: ' + self._md(task['publication_evidence']))
                 if task.get('notes'):
                     lines.append('  - Not: ' + self._md(task['notes']))
                 if task.get('review_required'):
@@ -434,9 +535,49 @@ class TaskManager:
                 output = original.rstrip() + '\n\n' + block + '\n'
             if output != original:
                 self._atomic_text(target, output)
+            self._export_history(conn, binding, brain)
         # Export is not a data mutation and should not trigger another refresh cycle.
         self.load()
         return str(target)
+
+    def _export_history(self, conn, binding, brain):
+        # The SQLite journal survives task deletion, unbinding, and failed projection writes.
+        start = '<!-- taskflow-history:begin ' + binding['project_id'] + ' -->'
+        end = '<!-- taskflow-history:end ' + binding['project_id'] + ' -->'
+        lines = [start, '## TaskFlow sonuç geçmişi', '',
+                 '> Kalıcı sonuç kaydıdır. Arşivlemek veya görev silmek bu geçmişi silmez.', '']
+        kinds = {'report': 'Agent sonucu', 'imported_report': 'Önceki agent sonucu',
+                 'manual_completion': 'Manuel durum değişikliği', 'imported_completion': 'Önceki tamamlanma',
+                 'archived': 'Arşivlendi', 'restored': 'Arşivden geri getirildi', 'published': 'Yayın doğrulandı',
+                 'requeued': 'Tekrar sıraya alındı', 'deleted': 'Görev silindi'}
+        for payload, in conn.execute('SELECT payload FROM task_events WHERE project_id=? ORDER BY rowid',
+                                     (binding['project_id'],)):
+            event = json.loads(payload)
+            task = event['task']
+            lines.extend(['### ' + self._md(task['title']),
+                          '- Kayıt: `{}` · {} · {}'.format(event['id'], event['recorded_at'], kinds.get(event['kind'], event['kind'])),
+                          '- Görev: `{}` · {} · {}'.format(task['id'], task['status'], self.delivery_label(task))])
+            result = task.get('result', {})
+            if result:
+                lines.extend(['- Sonuç: ' + self._md(result['summary']), '- Kanıt: ' + self._md(result['evidence'])])
+            if task.get('publication_evidence'):
+                lines.append('- Yayın kanıtı: ' + self._md(task['publication_evidence']))
+            lines.append('')
+        lines.append(end)
+        target = brain / 'TASKFLOW_HISTORY.md'
+        original = target.read_text(encoding='utf-8-sig') if target.exists() else '# TaskFlow çalışma geçmişi\n'
+        if (start in original) != (end in original) or original.count(start) > 1 or original.count(end) > 1:
+            raise ValueError('TASKFLOW_HISTORY.md işaretleri bozuk; dosya korunuyor.')
+        block = '\n'.join(lines)
+        if start in original:
+            begin, finish = original.index(start), original.index(end)
+            if finish < begin:
+                raise ValueError('TASKFLOW_HISTORY.md işaret sırası bozuk; dosya korunuyor.')
+            output = original[:begin] + block + original[finish + len(end):]
+        else:
+            output = original.rstrip() + '\n\n' + block + '\n'
+        if output != original:
+            self._atomic_text(target, output)
 
     @staticmethod
     def _atomic_text(target, output):

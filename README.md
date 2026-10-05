@@ -23,13 +23,17 @@ Kurulum yönetici yetkisi gerektirmez. Mevcut bir kurulum varsa uygulama dosyas�
 - **Görev kartı:** Onay kutusu görevi tamamlar; çift tıklama metni düzenler. Üç nokta menüsünden düzenleme, not ve silme işlemlerine erişin.
 - **Pin:** Pencereyi diğer pencerelerin üzerinde tutar.
 - **Gizle / kapat / Esc:** Uygulamayı sistem tepsisine gizler. Tamamen çıkmak için tepsi menüsündeki **Uygulamayı Kapat** seçeneğini kullanın.
-- **Tamamlananları Temizle:** Seçili projedeki tamamlanan görevleri onay sonrasında siler.
+- **Tamamlananları Arşivle:** Seçili projedeki tamamlanan görevleri ana listeden kaldırır; sonuçları, notları ve doğrulama geçmişi korunur. Üstteki üç nokta veya proje menüsünden **Arşivlenen görevler** açılır; **Geri getir** görevi tamamlanmış haliyle listeye döndürür.
 
 Uygulama eski kompakt ölçüsü olan `440×640` ile açılır, `340×460` ölçüsüne kadar küçültülebilir ve kenar/köşelerden sürüklenerek yeniden boyutlandırılabilir.
 
 ## Agent bağlantısı
 
-Görevleri biriktirin, proje menüsünden **Agent bağlantısını ayarla** ile yerel depo ve isteğe bağlı OZI Brain proje klasörünü seçin. Ortak `taskflow` becerisini bir kez kurduktan sonra agent sohbetine **“TaskFlow’da bekleyen Demo görevlerini yap”** yazmanız yeterlidir. Proje belirtilmezse agent bulunduğu deponun bağlantısını kullanır. Yönerge kopyalamak gerekmez; mevcut kopyalama seçeneği beceri kurulmamış ortamlarda kullanılabilir. Agent sonucu açık uygulamada otomatik görünür; onay gerektiren işler tiklenmeden sizi bekler. OZI Brain `TODO.md` dosyasındaki TaskFlow bölümü aynı kayıtlardan güncellenir.
+Görevleri biriktirin, proje menüsünden **Agent bağlantısını ayarla** ile yerel depo ve isteğe bağlı OZI Brain proje klasörünü seçin. Ortak `taskflow` becerisini bir kez kurduktan sonra agent sohbetine **“TaskFlow’da bekleyen Demo görevlerini yap”** yazmanız yeterlidir. Proje belirtilmezse agent bulunduğu deponun bağlantısını kullanır. Yönerge kopyalamak gerekmez; mevcut kopyalama seçeneği beceri kurulmamış ortamlarda kullanılabilir. Agent sonucu açık uygulamada otomatik görünür; onay gerektiren işler tiklenmeden sizi bekler. OZI Brain `TODO.md` dosyasındaki TaskFlow bölümü aynı kayıtlardan güncellenir. Sonuçlar ayrıca `TASKFLOW_HISTORY.md` içinde kalıcı tutulur; görev arşivlemek veya silmek bu geçmişi silmez.
+
+Agentın yerelde tamamladığı iş **Yerelde tamamlandı**, doğrulanmış yayın **Yayınlandı** olarak görünür. Yayın gerektirmeyen işler ayrıca belirtilebilir. Yayın kaydı, yayın yapma izni veya otomatik yayın işlemi değildir. Görev menüsündeki **Yayın doğrulamasını kaydet** yalnızca gerçekleşen yayının kanıtını kaydeder. Eski görevlerin yayın durumu tahmin edilmez.
+
+Yeni kurulum mevcut SQLite kayıtlarını ve ayarları korur. Önceden eski sürümle silinmiş görevler bu güncellemeyle geri getirilemez.
 
 Görev eklemek agent çalıştırmaz. Ek bir API veya ücretli servis gerekmez. [Kurulum ve çalışma ayrıntıları](docs/AGENT_BRIDGE.md).
 
@@ -55,7 +59,7 @@ Bu komutlar `dist_agent\TaskFlowAgent.exe`, `dist\TaskFlow.exe` ve iki aracı i�
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_app test_agent_bridge test_taskflow_skill -v
+python -m unittest test_app test_agent_bridge test_taskflow_skill test_task_history -v
 python preview_design.py
 ```
 

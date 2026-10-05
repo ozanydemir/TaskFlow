@@ -4,7 +4,7 @@
 Native Windows desktop application, built with Python and PyQt5.
 
 ## Purpose
-Local project-based task tracking. Create, edit, complete and delete tasks; filter by user-defined projects; clear completed tasks.
+Local project-based task tracking. Create, edit, complete and delete tasks; filter by user-defined projects; archive completed tasks and restore them with their results. Record local completion separately from verified publication; retain result history locally and in an optional OZI project journal.
 
 ## Confirmed constraints
 The user requested the supplied TaskFlow reference image as the visual authority. Keep the pin and existing hide/close behavior, with no notification or maximize button. Project badges use project-specific colors without a YouTube icon. The repository folder must be named TaskFlow.

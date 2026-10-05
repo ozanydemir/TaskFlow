@@ -21,11 +21,20 @@ jobs:
       - name: Verify task storage and agent bridge
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m unittest test_app test_agent_bridge test_taskflow_skill -v
+        run: python -m unittest test_app test_agent_bridge test_taskflow_skill test_task_history -v
       - name: Build agent bridge
         run: python build_agent.py
       - name: Build application
         run: python build_exe.py
+      - name: Verify frozen application
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $process = Start-Process -FilePath 'dist/TaskFlow.exe' -ArgumentList @('--verify-build', 'build/frozen-verification.json') -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Frozen verification process failed' }
+          if (-not (Test-Path build/frozen-verification.json)) { throw 'Frozen verification report missing' }
+          $result = Get-Content build/frozen-verification.json | ConvertFrom-Json
+          if (-not $result.ok) { throw 'Frozen verification failed' }
       - name: Build installer
         run: python build_installer.py
       - name: Upload build artifacts

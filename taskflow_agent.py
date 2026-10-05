@@ -14,16 +14,17 @@ def command_parser():
     parser.add_argument('--db', help='Existing TaskFlow SQLite file; default: the desktop app store')
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('projects', help='List project names and local bindings')
-    for name in ('list', 'claim', 'report', 'export', 'bind'):
+    for name in ('list', 'claim', 'report', 'publish', 'history', 'export', 'bind'):
         cmd = sub.add_parser(name)
         cmd.add_argument('--project', required=True, help='Exact TaskFlow project name')
-        if name in ('claim', 'report', 'bind'):
+        if name in ('claim', 'report', 'publish', 'bind'):
             cmd.add_argument('--repo', required=True, help='Mapped repository path, checked before writing')
-        if name in ('claim', 'report'):
+        if name in ('claim', 'report', 'publish'):
             cmd.add_argument('--id', required=True)
             cmd.add_argument('--revision', required=True, type=int)
         if name == 'list':
             cmd.add_argument('--status', choices=sorted(TaskManager.STATUSES))
+            cmd.add_argument('--archived', action='store_true', help='List archived tasks instead of the current list')
         elif name == 'claim':
             cmd.add_argument('--owner', required=True, help='Agent session identifier')
         elif name == 'report':
@@ -31,6 +32,9 @@ def command_parser():
             cmd.add_argument('--status', required=True, choices=['completed', 'needs_review', 'blocked', 'pending'])
             cmd.add_argument('--summary', required=True)
             cmd.add_argument('--evidence', default='')
+            cmd.add_argument('--delivery', choices=sorted(TaskManager.DELIVERIES), help='Verified delivery scope; defaults to local')
+        elif name == 'publish':
+            cmd.add_argument('--evidence', required=True, help='Record existing publication evidence; never deploys code')
         elif name == 'bind':
             cmd.add_argument('--brain-dir', default='', help='Optional OZI project directory')
     return parser
@@ -50,10 +54,10 @@ def run(args):
         binding = manager.bindings.get(args.project)
         if not binding:
             raise ValueError('Önce TaskFlow proje menüsünden agent bağlantısını kurun.')
-        if args.command in ('claim', 'report') and os.path.normcase(str(Path(args.repo).resolve())) != os.path.normcase(binding['repo_path']):
+        if args.command in ('claim', 'report', 'publish') and os.path.normcase(str(Path(args.repo).resolve())) != os.path.normcase(binding['repo_path']):
             raise ValueError('Agent deposu bu projenin kayıtlı deposuyla eşleşmiyor.')
         if args.command == 'list':
-            tasks = manager.get_tasks(args.project)
+            tasks = manager.get_tasks(args.project, archived=args.archived)
             if args.status:
                 tasks = [t for t in tasks if t['status'] == args.status]
             # Another session must not receive an active claim token.
@@ -63,7 +67,11 @@ def run(args):
         elif args.command == 'claim':
             result = manager.claim_task(args.project, args.id, args.revision, args.owner)
         elif args.command == 'report':
-            result = manager.report_task(args.project, args.id, args.revision, args.token, args.status, args.summary, args.evidence)
+            result = manager.report_task(args.project, args.id, args.revision, args.token, args.status, args.summary, args.evidence, args.delivery)
+        elif args.command == 'publish':
+            result = manager.mark_published(args.project, args.id, args.revision, args.evidence)
+        elif args.command == 'history':
+            result = {'events': manager.get_history(args.project)}
         else:
             result = {'path': manager.export_project(args.project)}
     return {'result': result, 'sync_warnings': manager.sync_errors}
@@ -108,8 +116,9 @@ def agent_prompt(manager, project):
         'Her görev için dönen id/revision ile claim çalıştır; çakışma varsa görevi üstlenme:',
         prefix + ' claim ' + scope + ' ' + repo + " --id '<id>' --revision <revision> --owner '<oturum-adı>'",
         'Görevi uygula ve uygun kontrolleri çalıştır. Claim sonucundaki yeni revision/token ile sonucu yaz:',
-        prefix + ' report ' + scope + ' ' + repo + " --id '<id>' --revision <claim-revision> --token '<claim-token>' --status completed --summary '<yapılan değişiklik>' --evidence '<gerçek test sonucu / commit / dosya>'",
+        prefix + ' report ' + scope + ' ' + repo + " --id '<id>' --revision <claim-revision> --token '<claim-token>' --status completed --delivery local --summary '<yapılan değişiklik>' --evidence '<gerçek test sonucu / commit / dosya>'",
         'Görsel veya kullanıcıya bağlı doğrulama için needs_review, engel için blocked kullan. Doğrulanmayan işi completed yapma.',
+        'Yerel değişiklik yayın değildir. Yayın yetkisi ve gerçek doğrulama varsa --delivery published kullan; yayın gerekmiyorsa not_applicable kullan.',
         'Görev değişmişse eski sonucu zorla yazma. Git commit/push/yayın için mevcut kullanıcı yetkisini ayrıca kontrol et.',
         'Agent bağlantısı yereldir; ücretli API veya otomatik agent başlatma gerektirmez.',
     ])

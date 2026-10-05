@@ -26,7 +26,9 @@ Agent sonucu kaydedince açık TaskFlow penceresi en geç yaklaşık 1,5 saniyed
 | Agent çalışıyor | Bir agent bu görevi üstlendi |
 | Kontrolünü bekliyor | İş yapıldı; görsel veya kullanıcı kontrolü gerekiyor |
 | Engellendi | Agent bir engel bildirdi |
-| Tamamlandı / tikli | Agent doğrulama kaydetti veya siz manuel tamamladınız |
+| Yerelde tamamlandı / tikli | Doğrulanmış çalışma yerelde; yayınlandığı anlamına gelmez |
+| Yayınlandı | Agent veya kullanıcı gerçekleşen yayın için kanıt kaydetti |
+| Tamamlandı / tikli | Manuel veya eski kayıt; yayın durumu tahmin edilmez |
 
 Görev menüsündeki **Agent sonucunu gör**, değişikliği ve doğrulama kaydını gösterir. **Agent sonrası onayım gerekli** seçeneği açık olan görevler agent raporuyla otomatik tiklenmez. Kontrol ettikten sonra mevcut onay kutusuyla kabul edebilirsiniz. Yarıda kalan veya engellenen işler **Tekrar sıraya al** ile yeniden üstlenilebilir; önceki rapor korunur.
 
@@ -63,6 +65,12 @@ Beceri eklemek bütün görevleri otomatik çalıştırmaz. Kullanıcı yalnızc
 
 Bağlı OZI Brain proje klasöründe `TODO.md` otomatik güncellenir. Dosyanın yalnızca `taskflow:begin` / `taskflow:end` işaretleri arasındaki bölümü TaskFlow'a aittir. Önceden yazdığınız diğer notlar korunur. Görevler sabit kimlikleri ve güncel durumlarıyla görünür.
 
+`TODO.md` güncel ve arşivlenmemiş görevlerin görünümüdür. **Tamamlananları Arşivle** tamamlanan görevleri bu görünümden kaldırır, sonuçları ve notları SQLite içinde tutar. Proje menüsündeki **Arşivlenen görevler** üzerinden sonuçları okuyup görevi tamamlanmış haliyle geri getirebilirsiniz; geri getirmek agentı yeniden başlatmaz.
+
+Sonuç raporları, manuel kabul, yayın kaydı, arşivleme ve silme olayları ayrı SQLite günlüğüne yazılır. `TASKFLOW_HISTORY.md` dosyasının `taskflow-history:begin` / `taskflow-history:end` arasındaki bölümü bu günlüğün kalıcı yansımasıdır. Başka notlar korunur. Görev silinse veya proje bağlantısı kaldırılsa da geçmiş dosyası silinmez; tekrar eşitleme kayıtları çoğaltmaz. Proje klasörü değişirse yeni klasöre aynı günlük yansıtılır; eski geçmiş dosyası korunur. Bu dosya repo handoff veya OZI `CURRENT_STATE.md` kapanışının yerine geçmez.
+
+Mevcut sonuç geçmişi ilk açılışta bir kez günlüğe aktarılır; eski görevlerin yayın durumu `unspecified` kalır. Eski sürümde silinen sonuçlar kurtarılamaz. Eski EXE'ye dönüldüğünde arşiv ayrımını bilmediği için görevler tekrar görünebilir; iki sürümü aynı veri üzerinde birlikte kullanmayın.
+
 Esas kayıt SQLite veritabanıdır. Agent sonuçları bağlantı aracı üzerinden yazar; `TODO.md` içindeki tikleri elle değiştirerek iki yönlü senkronizasyon yapılmaz. Uygulama bu dosyayı otomatik commit veya push etmez. OZI Brain yoluna erişilemiyorsa görevler veritabanına kaydedilir ve eşitleme uyarısı gösterilir. Proje bağlantısını tekrar kaydederek veya `export` komutuyla yeniden deneyebilirsiniz.
 
 ## Eski veriler
@@ -84,10 +92,19 @@ Kurulum, masaüstü uygulamasının yanına `TaskFlowAgent.exe` ekler. Python ku
 .\TaskFlowAgent.exe claim --project 'Demo' --repo 'C:\Projects\Demo' --id '<id>' --revision 1 --owner '<agent-session>'
 
 # claim sonucundaki yeni revision ve token değerini kullanın.
-.\TaskFlowAgent.exe report --project 'Demo' --repo 'C:\Projects\Demo' --id '<id>' --revision 2 --token '<claim-token>' --status completed --summary 'Yapılan değişiklik' --evidence 'Gerçek doğrulama sonucu'
+.\TaskFlowAgent.exe report --project 'Demo' --repo 'C:\Projects\Demo' --id '<id>' --revision 2 --token '<claim-token>' --status completed --delivery local --summary 'Yapılan değişiklik' --evidence 'Gerçek doğrulama sonucu'
 ```
 
-`--db '<mevcut data.sqlite3 yolu>'` seçeneği komut adından önce verilir. `report` durumları: `completed`, `needs_review`, `blocked`, `pending`. Kaynaktan çalışan agent, gerektiğinde `bind --project ... --repo ... --brain-dir ...` ile bağlantı kurabilir; kullanıcı arayüzü aynı işlemi daha kolay sunar.
+`--db '<mevcut data.sqlite3 yolu>'` seçeneği komut adından önce verilir. `report` durumları: `completed`, `needs_review`, `blocked`, `pending`. TaskFlow 1.2.0 ve üzeri yayın kapsamını `--delivery local`, `published` veya `not_applicable` ile kaydeder. Kapsam yazılmayan yeni tamamlanma/kontrol raporları güvenli olarak `local` olur; eski raporlar geriye dönük yeniden etiketlenmez. `published` için doğrulama kanıtı zorunludur. `needs_review` işi yayınlanmış olsa da kullanıcı onayı olmadan tiklenmez.
+
+```powershell
+# Bunlar yalnızca okuma ve sonuç kaydıdır; kod yayınlamaz.
+.\TaskFlowAgent.exe list --project 'Demo' --archived
+.\TaskFlowAgent.exe history --project 'Demo'
+.\TaskFlowAgent.exe publish --project 'Demo' --repo 'C:\Projects\Demo' --id '<id>' --revision <güncel-revision> --evidence 'Gerçek yayın doğrulaması'
+```
+
+`publish` doğru depo/proje, güncel revision ve tamamlanmış veya kontrol bekleyen görev gerektirir. Ana listedeki görev menüsünün **Yayın doğrulamasını kaydet** seçeneği aynı kayıt işlemini sunar. Her iki yol da gerçek yayını kendi başına test etmez; kanıtı kaydeden kişinin doğrulamasına dayanır. Kaynaktan çalışan agent, gerektiğinde `bind --project ... --repo ... --brain-dir ...` ile bağlantı kurabilir; kullanıcı arayüzü aynı işlemi daha kolay sunar.
 
 İki agent aynı görevi aynı anda üstlenemez. Görevi düzenlemeniz, yeniden sıraya almanız veya manuel tiklemeniz eski claim'i geçersiz kılar. Yanlış proje, yanlış depo, eski revision veya yanlış token içeren sonuç reddedilir. `completed` raporu boş doğrulama kaydıyla kabul edilmez. Doğrulama alanı agentın verdiği kanıttır; araç testleri kendi başına yeniden çalıştırmaz.
 
