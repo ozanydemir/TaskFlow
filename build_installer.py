@@ -11,10 +11,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 
-def build(output_dir: str = "dist_installer") -> Path:
-    payload = ROOT / "dist" / "TaskFlow.exe"
+def build(output_dir: str = "dist_installer", app_dir: str = "dist") -> Path:
+    payload = ROOT / app_dir / "TaskFlow.exe"
     if not payload.is_file():
         raise FileNotFoundError("dist/TaskFlow.exe bulunamadı. Önce python build_exe.py çalıştırın.")
+
+    agent = ROOT / 'dist_agent' / 'TaskFlowAgent.exe'
+    if not agent.is_file():
+        raise FileNotFoundError('Önce python build_agent.py çalıştırın.')
 
     destination = ROOT / output_dir
     destination.mkdir(parents=True, exist_ok=True)
@@ -29,6 +33,7 @@ def build(output_dir: str = "dist_installer") -> Path:
         f"--distpath={destination}",
         "--icon=resources/icon.ico",
         f"--add-binary={payload};payload",
+        f"--add-binary={agent};payload",
         "--hidden-import=win32com.client",
         "--hidden-import=pythoncom",
         "--hidden-import=pywintypes",
@@ -41,6 +46,7 @@ def build(output_dir: str = "dist_installer") -> Path:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="dist_installer")
+    parser.add_argument("--app-dir", default="dist")
     args = parser.parse_args()
-    result = build(args.output_dir)
+    result = build(args.output_dir, args.app_dir)
     print(f"Installer hazır: {result} ({result.stat().st_size:,} bytes)")

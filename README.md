@@ -14,7 +14,7 @@ En güncel Windows paketini [GitHub Releases](https://github.com/ozanydemir/Task
 2. Kurulum wizard’ı uygulamayı `%LOCALAPPDATA%\Programs\TaskFlow` klasörüne otomatik kurar.
 3. Masaüstü ve Başlat menüsü kısayollarını oluşturur, ardından TaskFlow’u başlatır.
 
-Kurulum yönetici yetkisi gerektirmez. Mevcut bir kurulum varsa uygulama dosyasını günceller; kullanıcı verileri `%APPDATA%\TaskFlow\data.json` içinde korunur.
+Kurulum yönetici yetkisi gerektirmez. Mevcut bir kurulum varsa uygulama dosyasını günceller; kullanıcı verileri `%APPDATA%\TaskFlow\data.sqlite3` içinde korunur. Eski JSON kayıtları ilk açılışta, orijinal dosya ve yedeği korunarak aktarılır.
 
 ## Kullanım
 
@@ -27,6 +27,12 @@ Kurulum yönetici yetkisi gerektirmez. Mevcut bir kurulum varsa uygulama dosyas�
 
 Uygulama eski kompakt ölçüsü olan `440×640` ile açılır, `340×460` ölçüsüne kadar küçültülebilir ve kenar/köşelerden sürüklenerek yeniden boyutlandırılabilir.
 
+## Agent bağlantısı
+
+Görevleri biriktirin, proje menüsünden **Agent bağlantısını ayarla** ile yerel depo ve isteğe bağlı OZI Brain proje klasörünü seçin. Hazır olduğunuzda **Agent yönergesini kopyala** seçeneğiyle ilgili agent sohbetini başlatın. Agent sonucu açık uygulamada otomatik görünür; onay gerektiren işler tiklenmeden sizi bekler. OZI Brain `TODO.md` dosyasındaki TaskFlow bölümü aynı kayıtlardan güncellenir.
+
+Görev eklemek agent çalıştırmaz. Ek bir API veya ücretli servis gerekmez. [Kurulum ve çalışma ayrıntıları](docs/AGENT_BRIDGE.md).
+
 ## Kaynaktan çalıştırma
 
 ```powershell
@@ -38,17 +44,18 @@ python main.py
 
 ```powershell
 python -m pip install PyInstaller PyQt5 pywin32
+python build_agent.py
 python build_exe.py
 python build_installer.py
 ```
 
-Bu komutlar sırasıyla `dist\TaskFlow.exe` ve `dist_installer\TaskFlowSetup.exe` dosyalarını oluşturur. GitHub Actions, `v*` etiketi gönderildiğinde aynı iki dosyayı otomatik olarak Release varlığı olarak ekler.
+Bu komutlar `dist_agent\TaskFlowAgent.exe`, `dist\TaskFlow.exe` ve iki aracı içeren `dist_installer\TaskFlowSetup.exe` dosyalarını oluşturur. GitHub Actions, `v*` etiketi gönderildiğinde aynı üç dosyayı otomatik olarak Release varlığı olarak ekler.
 
 ## Doğrulama
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_app -v
+python -m unittest test_app test_agent_bridge -v
 python preview_design.py
 ```
 

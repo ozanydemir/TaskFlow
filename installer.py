@@ -67,7 +67,11 @@ def install_taskflow() -> Path:
     destination = install_root()
     destination.mkdir(parents=True, exist_ok=True)
     target = destination / "TaskFlow.exe"
+    agent = bundled_path("payload/TaskFlowAgent.exe")
+    if not agent.is_file():
+        raise FileNotFoundError("Kurulum paketi içinde TaskFlowAgent.exe bulunamadı.")
     shutil.copy2(payload, target)
+    shutil.copy2(agent, destination / "TaskFlowAgent.exe")
 
     desktop = Path.home() / "Desktop"
     create_shortcut(desktop / "TaskFlow.lnk", target, destination)
@@ -115,7 +119,7 @@ class InstallerWindow:
         try:
             target = install_taskflow()
         except Exception as exc:  # pragma: no cover - exercised by installer users
-            self.root.after(0, lambda: self.failed(str(exc)))
+            self.root.after(0, lambda message=str(exc): self.failed(message))
             return
         self.root.after(0, lambda: self.finished(target))
 

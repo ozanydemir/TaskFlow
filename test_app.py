@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 import unittest
 import tempfile
@@ -23,14 +23,12 @@ class TestTaskFlow(unittest.TestCase):
         cls.app.setFont(QFont('Segoe UI', 10))
 
     def setUp(self):
-        self.test_file = os.path.abspath('test_run_data.json')
-        if os.path.exists(self.test_file):
-            os.remove(self.test_file)
+        self.directory = tempfile.TemporaryDirectory()
+        self.test_file = str(Path(self.directory.name) / 'data.json')
         self.tm = TaskManager(self.test_file)
 
     def tearDown(self):
-        if os.path.exists(self.test_file):
-            os.remove(self.test_file)
+        self.directory.cleanup()
 
     def test_task_operations(self):
         # 1. Add Task

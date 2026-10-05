@@ -16,13 +16,49 @@ def _log_debug(msg):
     except Exception:
         pass
 
+def _verify_build(report_file):
+    """Exercise the frozen GUI with disposable data, never the user's configuration."""
+    import json
+    import tempfile
+    from pathlib import Path
+    from task_manager import TaskManager
+    app = QApplication(['TaskFlow verification'])
+    app.setQuitOnLastWindowClosed(False)
+    with tempfile.TemporaryDirectory() as directory:
+        manager = TaskManager(Path(directory) / 'data.json')
+        manager.settings['autostart'] = False
+        manager.save()
+        task = manager.add_task('Synthetic package task', 'Demo')
+        window = TaskFlowApp(start_minimized=True, task_manager=manager, setup_autostart=False)
+        external = TaskManager(manager.db_file)
+        claim = external.claim_task('Demo', task['id'], task['revision'], 'build-verification')
+        external.report_task('Demo', task['id'], claim['revision'], claim['claim_token'],
+                             'completed', 'Synthetic verification', 'Packaged GUI and SQLite round trip passed')
+        window._poll_external_changes()
+        app.processEvents()
+        card = window.task_list_widget.itemWidget(window.task_list_widget.item(0))
+        assert card.checkbox.isChecked()
+        assert (window.width(), window.height()) == (440, 640)
+        assert Path(getattr(sys, '_MEIPASS', Path(__file__).parent), 'resources', 'icon.ico').is_file()
+        window.sync_timer.stop()
+        window.tray_icon.hide()
+        window.deleteLater()
+        app.processEvents()
+    Path(report_file).write_text(json.dumps({'ok': True, 'checks': ['frozen GUI', 'SQLite', 'external result refresh',
+                                                                  'compact dimensions', 'bundled icon']}), encoding='utf-8')
+
+
 def main():
     _log_debug("=== TaskFlow starting up ===")
     try:
         # Parse CLI args
         parser = argparse.ArgumentParser(description="TaskFlow Desktop To-Do App")
         parser.add_argument('--minimized', action='store_true', help="Start minimized in system tray")
+        parser.add_argument('--verify-build', help=argparse.SUPPRESS)
         args, _ = parser.parse_known_args()
+        if args.verify_build:
+            _verify_build(args.verify_build)
+            return
 
         # Set Windows App ID for proper taskbar icon handling
         try:

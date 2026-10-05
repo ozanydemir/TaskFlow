@@ -26,6 +26,7 @@ def render():
         # Public preview data only. Never render the developer's real projects
         # or task text into screenshots committed to the repository.
         manager.projects = ['Website Launch', 'Weekly Planning', 'Product Ideas', 'Home Projects']
+        manager.save()
         done = manager.add_task('Review the launch checklist and confirm the next milestone.', 'Website Launch')
         manager.toggle_task(done['id'])
         manager.add_task('Collect feedback, prioritize the open items, and prepare the next update.', 'Website Launch')

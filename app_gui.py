@@ -1,16 +1,18 @@
 import os
 import sys
+import sqlite3
 from PyQt5.QtCore import Qt, QSize, QRectF, QRect, QEvent, pyqtSignal, QPoint, QTimer
 from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QPen, QCursor, QPixmap, QFontMetrics
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QListWidget, QListWidgetItem,
     QCheckBox, QSystemTrayIcon, QMenu, QAction, QDialog,
-    QFrame, QSizePolicy, QSizeGrip, QScrollArea
+    QFrame, QSizePolicy, QSizeGrip, QScrollArea, QFileDialog, QTextEdit
 )
 
 import autostart
 from task_manager import TaskManager
+from taskflow_agent import agent_prompt
 from taskflow_visuals import make_icon, CONTROL_STYLE, MENU_STYLE
 from datetime import datetime
 
@@ -163,6 +165,67 @@ class ModernDialog(QDialog):
         title_lbl = QLabel(title)
         title_lbl.setStyleSheet("color: #ffffff; font-size: 15px; font-weight: bold; border: none;")
         self.card_layout.addWidget(title_lbl)
+
+
+class ProjectConnectionDialog(ModernDialog):
+    def __init__(self, project, binding, parent=None):
+        super().__init__('Agent bağlantısı · ' + project, parent)
+        self.resize(420, 360)
+        self.setStyleSheet("""
+            QLineEdit, QTextEdit { background: #0e1422; color: #f2f5fc; border: 1px solid #304461;
+                border-radius: 8px; padding: 8px; font-size: 12px; selection-background-color: #2563eb; }
+            QLineEdit:focus { border-color: #3b82f6; }
+            QPushButton { background: #101726; color: #d4e2ff; border: 1px solid #304461;
+                border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+            QPushButton:hover, QPushButton:focus { border-color: #3b82f6; }
+        """)
+        info = QLabel('Görevleri biriktir; agentı istediğin zaman başlat.\nBu bağlantı kendiliğinden agent çalıştırmaz.')
+        info.setStyleSheet('color: #96add4; font-size: 12px; border: none;')
+        info.setWordWrap(True)
+        self.card_layout.addWidget(info)
+        self.repo_field = self._folder_field('Projenin bilgisayarındaki klasörü', binding.get('repo_path', ''))
+        self.brain_field = self._folder_field('OZI Brain proje klasörü (isteğe bağlı)', binding.get('brain_dir', ''))
+        self.error_label = QLabel()
+        self.error_label.setWordWrap(True)
+        self.error_label.setStyleSheet('color: #fbbf24; border: none; font-size: 12px;')
+        self.card_layout.addWidget(self.error_label)
+        buttons = QHBoxLayout()
+        cancel = QPushButton('Vazgeç')
+        cancel.clicked.connect(self.reject)
+        save = QPushButton('Bağlantıyı kaydet')
+        save.setStyleSheet('background: #2563eb; color: white;')
+        save.clicked.connect(self.accept)
+        buttons.addStretch()
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+        self.card_layout.addLayout(buttons)
+
+    def _folder_field(self, label, value):
+        title = QLabel(label)
+        title.setStyleSheet('color: #d4e2ff; border: none; font-size: 12px;')
+        self.card_layout.addWidget(title)
+        row = QHBoxLayout()
+        field = QLineEdit(value)
+        field.setAccessibleName(label)
+        choose = QPushButton('Seç')
+        def browse():
+            folder = QFileDialog.getExistingDirectory(self, label, field.text())
+            if folder:
+                field.setText(folder)
+        choose.clicked.connect(browse)
+        row.addWidget(field, 1)
+        row.addWidget(choose)
+        self.card_layout.addLayout(row)
+        return field
+
+    def accept(self):
+        try:
+            self.parent().task_manager.bind_project(self.parent()._connection_project,
+                                                  self.repo_field.text().strip(), self.brain_field.text().strip())
+        except (ValueError, OSError, sqlite3.Error) as exc:
+            self.error_label.setText(str(exc))
+            return
+        super().accept()
 
 
 class CustomInputDialog(ModernDialog):
@@ -359,6 +422,8 @@ class TaskItemWidget(QFrame):
     task_deleted = pyqtSignal(str)
     task_edited = pyqtSignal(str, str)
     task_noted = pyqtSignal(str, str)
+    task_requeued = pyqtSignal(str)
+    task_review_changed = pyqtSignal(str, bool)
 
     def __init__(self, task, project_list, parent=None):
         super().__init__(parent)
@@ -418,7 +483,10 @@ class TaskItemWidget(QFrame):
             date_text = date.split(' ')[0]
         if task.get('completed'):
             date_text = 'Tamamlandı' + ('  ·  ' + date_text if date_text else '')
-        self.date_label = QLabel(date_text)
+        status_text = {'in_progress': 'Agent çalışıyor', 'needs_review': 'Kontrolünü bekliyor', 'blocked': 'Engellendi'}.get(task.get('status'))
+        self.date_label = QLabel(status_text or date_text)
+        if task.get('result'):
+            self.date_label.setToolTip(task['result']['summary'])
         self.date_label.setStyleSheet('color: #96add4; font-size: 11px;')
         self.metadata.addWidget(self.date_label)
         self.note_btn = QPushButton()
@@ -499,6 +567,11 @@ class TaskItemWidget(QFrame):
         menu.setStyleSheet(MENU_STYLE)
         edit = menu.addAction('Görevi düzenle')
         note = menu.addAction('Notu düzenle')
+        result = menu.addAction('Agent sonucunu gör') if self.task.get('result') else None
+        review = menu.addAction('Agent sonrası onayım gerekli')
+        review.setCheckable(True)
+        review.setChecked(self.task.get('review_required', False))
+        requeue = menu.addAction('Tekrar sıraya al') if self.task.get('status') in {'in_progress', 'needs_review', 'blocked'} else None
         menu.addSeparator()
         delete = menu.addAction('Görevi sil')
         action = menu.exec_(self.menu_btn.mapToGlobal(self.menu_btn.rect().bottomLeft()))
@@ -508,6 +581,28 @@ class TaskItemWidget(QFrame):
             self._edit_note()
         elif action == delete:
             self.task_deleted.emit(self.task['id'])
+        elif result is not None and action == result:
+            self._show_agent_result()
+        elif action == review:
+            self.task_review_changed.emit(self.task['id'], review.isChecked())
+        elif requeue is not None and action == requeue:
+            self.task_requeued.emit(self.task['id'])
+
+    def _show_agent_result(self):
+        dialog = ModernDialog('Agent sonucu', self)
+        dialog.resize(420, 350)
+        result = self.task['result']
+        text = QTextEdit()
+        text.setReadOnly(True)
+        text.setPlainText('Yapılan işlem:\n' + result['summary'] + '\n\nDoğrulama:\n' +
+                          (result['evidence'] or 'Doğrulama kaydı yok.') + '\n\n' + result['reported_at'])
+        text.setStyleSheet('background: #0e1422; color: #d4e2ff; border: 1px solid #304461; font-size: 12px;')
+        dialog.card_layout.addWidget(text)
+        close = QPushButton('Kapat')
+        close.setStyleSheet('background: #2563eb; color: white; border-radius: 8px; padding: 6px 16px;')
+        close.clicked.connect(dialog.accept)
+        dialog.card_layout.addWidget(close)
+        dialog.exec_()
 
     def mouseDoubleClickEvent(self, event):
         self._edit_title()
@@ -558,6 +653,11 @@ class TaskFlowApp(QMainWindow):
         self._setup_ui()
         self._refresh_project_tabs()
         self._refresh_tasks()
+        self.sync_timer = QTimer(self)
+        self.sync_timer.setInterval(1500)
+        self.sync_timer.timeout.connect(self._poll_external_changes)
+        self.sync_timer.start()
+        self._last_sync_warning = None
         # Receive pointer events before child widgets so the invisible resize
         # catchment also works when the pointer is over a child at the edge.
         QApplication.instance().installEventFilter(self)
@@ -861,6 +961,13 @@ class TaskFlowApp(QMainWindow):
             action.setCheckable(True)
             action.setChecked(project == self.current_project)
             action.triggered.connect(lambda checked, name=project: self._select_project(name))
+        if self.current_project != 'Tümü':
+            menu.addSeparator()
+            connection = menu.addAction('Agent bağlantısını ayarla')
+            connection.triggered.connect(lambda: self._configure_connection(self.current_project))
+            prompt = menu.addAction('Agent yönergesini kopyala')
+            prompt.setEnabled(self.current_project in self.task_manager.bindings)
+            prompt.triggered.connect(lambda: self._copy_agent_prompt(self.current_project))
         menu.exec_(self.projects_menu_btn.mapToGlobal(self.projects_menu_btn.rect().bottomLeft()))
 
     def resizeEvent(self, event):
@@ -1066,26 +1173,17 @@ class TaskFlowApp(QMainWindow):
 
     def _show_project_menu(self, proj_name):
         menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: #090d16;
-                color: #e2e8f0;
-                border: 1px solid #2563eb;
-                border-radius: 8px;
-                padding: 4px;
-            }
-            QMenu::item {
-                padding: 6px 16px;
-                border-radius: 4px;
-            }
-            QMenu::item:selected {
-                background-color: #ef4444;
-                color: #ffffff;
-                font-weight: bold;
-            }
-        """)
+        menu.setStyleSheet(MENU_STYLE)
+        bind_act = menu.addAction('Agent bağlantısını ayarla')
+        prompt_act = menu.addAction('Agent yönergesini kopyala')
+        prompt_act.setEnabled(proj_name in self.task_manager.bindings)
+        menu.addSeparator()
         del_act = menu.addAction(f"'{proj_name}' Projesini Sil")
         action = menu.exec_(self.cursor().pos())
+        if action == bind_act:
+            self._configure_connection(proj_name)
+        elif action == prompt_act:
+            self._copy_agent_prompt(proj_name)
         if action == del_act:
             dialog = CustomConfirmDialog(
                 "Projeyi Sil",
@@ -1094,8 +1192,58 @@ class TaskFlowApp(QMainWindow):
                 parent=self
             )
             if dialog.exec_() == QDialog.Accepted:
-                self.task_manager.delete_project(proj_name)
-                self._select_project("Tümü")
+                try:
+                    self.task_manager.delete_project(proj_name)
+                    self._select_project("Tümü")
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    CustomConfirmDialog('Proje silinemedi', str(exc), confirm_text='Tamam',
+                                        is_destructive=False, parent=self).exec_()
+
+    def _configure_connection(self, project):
+        self._connection_project = project
+        dialog = ProjectConnectionDialog(project, self.task_manager.bindings.get(project, {}), self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._notify_sync_warnings()
+            self._refresh_tasks()
+
+    def _copy_agent_prompt(self, project):
+        try:
+            QApplication.clipboard().setText(agent_prompt(self.task_manager, project))
+            self.tray_icon.showMessage('TaskFlow', 'Yönerge kopyalandı. Agent sohbetine yapıştırarak başlatabilirsin.',
+                                       QSystemTrayIcon.Information, 3500)
+        except (ValueError, OSError) as exc:
+            CustomConfirmDialog('Bağlantı bilgisi', str(exc), confirm_text='Tamam',
+                                is_destructive=False, parent=self).exec_()
+
+    def _poll_external_changes(self):
+        try:
+            if self.task_manager.reload_if_changed():
+                if self.current_project not in ['Tümü'] + self.task_manager.projects:
+                    self.current_project = 'Tümü'
+                scroll = self.task_list_widget.verticalScrollBar().value()
+                self._refresh_project_tabs()
+                self._refresh_tasks()
+                self.task_list_widget.verticalScrollBar().setValue(scroll)
+            self._notify_sync_warnings()
+        except (OSError, ValueError, sqlite3.Error) as exc:
+            if str(exc) != self._last_sync_warning:
+                self.tray_icon.showMessage('TaskFlow', 'Görevler yenilenemedi: ' + str(exc), QSystemTrayIcon.Warning, 5000)
+                self._last_sync_warning = str(exc)
+
+    def _notify_sync_warnings(self):
+        message = '\n'.join(self.task_manager.sync_errors)
+        if message and message != self._last_sync_warning:
+            self.tray_icon.showMessage('TaskFlow', 'Görevler kaydedildi; OZI Brain güncellenemedi: ' + message,
+                                       QSystemTrayIcon.Warning, 5000)
+        self._last_sync_warning = message or None
+
+    def _on_task_requeued(self, task_id):
+        self.task_manager.requeue_task(task_id)
+        self._refresh_tasks()
+
+    def _on_task_review_changed(self, task_id, required):
+        self.task_manager.set_review_required(task_id, required)
+        self._refresh_tasks()
 
     def _refresh_tasks(self):
         self.task_list_widget.clear()
@@ -1108,6 +1256,8 @@ class TaskFlowApp(QMainWindow):
             item_widget.task_deleted.connect(self._on_task_deleted)
             item_widget.task_edited.connect(self._on_task_edited)
             item_widget.task_noted.connect(self._on_task_noted)
+            item_widget.task_requeued.connect(self._on_task_requeued)
+            item_widget.task_review_changed.connect(self._on_task_review_changed)
 
             width = max(100, self.task_list_widget.viewport().width() - 18)
             item.setSizeHint(QSize(width, item_widget.fit_to_width(width)))

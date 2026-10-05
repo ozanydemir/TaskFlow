@@ -16,3 +16,17 @@ install_taskflow_update.ps1
 .vscode/
 test_*.json
 test_run_data.json
+
+# Local tasks, agent bindings and credentials must never enter the public repository.
+.env
+.env.*
+!.env.example
+data.json
+data.json.*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.pre-sqlite.bak
+.taskflow-*.tmp
+dist_agent/
