@@ -141,3 +141,12 @@ Local verified artifacts:
 Use the new setup after exiting the old app through the tray. Existing local data
 and saved project connections are retained. Shared skill updates are already visible
 through the installed junctions; the new runtime features require the new setup.
+
+### Archive release Windows CI closure
+
+Windows run 37309070137 succeeded at source commit 74c0354: all 51 tests,
+agent/application/installer builds, frozen GUI archive/delivery/restore verification,
+artifact upload and tag-release publishing passed. This closes the pending CI
+check for the archive feature. Runtime artifacts retain the local frozen-check
+and installer-payload evidence listed above; the real user installation remains
+an explicit setup step.
