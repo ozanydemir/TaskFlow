@@ -84,3 +84,10 @@ the same files under the long profile name. Discovery and bridge execution worke
 Database/repository assertions now verify actual filesystem identity with samefile,
 retaining the selected-store checks across Windows short/long path aliases.
 A new Windows run is required before claiming CI closure for this change.
+
+### Shared skill CI closure
+
+Windows run 37282414754 succeeded at 24faebb: all 38 tests, bridge/app/installer
+builds and artifact upload passed. The short/long path assertion failure is closed.
+Latest Graphify AST map has 304 nodes, 584 edges and 20 communities. This closeout
+changes documentation only; the tested source and installed skill remain unchanged.
