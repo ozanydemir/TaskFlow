@@ -49,4 +49,4 @@ if __name__ == "__main__":
     parser.add_argument("--app-dir", default="dist")
     args = parser.parse_args()
     result = build(args.output_dir, args.app_dir)
-    print(f"Installer hazır: {result} ({result.stat().st_size:,} bytes)")
+    print(f"Installer ready: {result} ({result.stat().st_size:,} bytes)")

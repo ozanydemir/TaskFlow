@@ -37,3 +37,7 @@ Synthetic verification files are local under build/agent-qa and are ignored. Pub
 ### Use / next action
 
 Close the previous desktop app through the tray Exit action, run the new setup, and bind each project once through the project menu. Copy the agent prompt when ready to authorize that project's work. Real user tasks have not been migrated by test runs. See docs/AGENT_BRIDGE.md for details and rollback limitations.
+
+## Windows CI follow-up
+
+Run 37274333096 passed all 28 tests and built app, agent and installer, then failed when the installer build script printed a Turkish character through the runner's cp1252 console. The success message was changed to ASCII. This changes build logging only; published runtime binaries and verified hashes remain valid. A new clean Windows run is required before claiming CI completion.
