@@ -41,3 +41,7 @@ Close the previous desktop app through the tray Exit action, run the new setup, 
 ## Windows CI follow-up
 
 Run 37274333096 passed all 28 tests and built app, agent and installer, then failed when the installer build script printed a Turkish character through the runner's cp1252 console. The success message was changed to ASCII. This changes build logging only; published runtime binaries and verified hashes remain valid. A new clean Windows run is required before claiming CI completion.
+
+### CI closure
+
+Windows run 37274830026 succeeded at source commit 1972606: all 28 tests, agent build, desktop build, installer build and artifact upload passed. The earlier cp1252 logging failure is closed. Public v1.1.0 assets retain the verified local SHA256 digests listed above; the logging-only follow-up does not alter runtime payloads.
