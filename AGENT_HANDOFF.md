@@ -150,3 +150,26 @@ artifact upload and tag-release publishing passed. This closes the pending CI
 check for the archive feature. Runtime artifacts retain the local frozen-check
 and installer-payload evidence listed above; the real user installation remains
 an explicit setup step.
+
+## 2026-10-21: real-profile v1.2.0 installation
+
+The v1.2.0 setup was installed in a real user profile on a fresh Windows 11
+workstation with no previous TaskFlow installation or data. The setup came from
+the v1.2.0 GitHub Release (tag 74c0354). Its size and SHA256 matched the verified
+TaskFlowSetup.exe listed above. The setup is unsigned.
+
+Verification:
+- The setup exited with code 0. The installed TaskFlow.exe and TaskFlowAgent.exe
+  match the verified digests listed above.
+- The desktop and Start menu shortcuts point to the installed application.
+- On first launch the app created a new SQLite store, opened at 440x640 (96 DPI),
+  responded, and its startup log showed no errors. There were no existing tasks
+  or settings to migrate.
+- As designed, the first launch added the per-user startup entry with
+  --minimized. Automatic start after a reboot has not been observed yet.
+- The installed bridge was run with --help only; no tasks were listed, claimed
+  or reported. The Claude Code junction for the shared skill already points to
+  the repository skill.
+- No source code or runtime payload changed, so Graphify was not rerun.
+
+Next: on this workstation, bind each project once through the project menu.
