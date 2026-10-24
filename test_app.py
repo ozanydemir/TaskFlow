@@ -152,6 +152,53 @@ class TestTaskFlow(unittest.TestCase):
             win.deleteLater()
             self.app.processEvents()
 
+    def test_task_menu_click_over_window_edge_is_not_a_resize(self):
+        from PyQt5.QtCore import QTimer
+        from PyQt5.QtTest import QTest
+        from PyQt5.QtWidgets import QMenu
+        from app_gui import TaskFlowApp
+        task = self.tm.add_task('Silinecek görev')
+        win = TaskFlowApp(start_minimized=True, task_manager=self.tm, setup_autostart=False)
+        clicked = []
+        try:
+            win.move(40, 20)
+            win.show()
+            self.app.processEvents()
+            card = win.task_list_widget.itemWidget(win.task_list_widget.item(0))
+
+            def click_delete_inside_edge_band():
+                menu = QApplication.activePopupWidget()
+                self.assertIsInstance(menu, QMenu)
+                # Real screens open the menu across the window's right resize catchment.
+                menu.move(win.mapToGlobal(QPoint(win.width() - 60, 200)))
+                self.app.processEvents()
+                action = next(a for a in menu.actions() if a.text() == 'Görevi sil')
+                row = menu.actionGeometry(action)
+                x = menu.mapFromGlobal(win.mapToGlobal(QPoint(win.width() - 8, 0))).x()
+                self.assertTrue(row.left() <= x <= row.right())
+                QTest.mouseClick(menu, Qt.LeftButton, Qt.NoModifier, QPoint(x, row.center().y()))
+                clicked.append(menu.isVisible())
+                menu.close()
+
+            QTimer.singleShot(0, click_delete_inside_edge_band)
+            card.menu_btn.click()
+            self.assertEqual(clicked, [False])
+            self.assertFalse(any(t['id'] == task['id'] for t in TaskManager(self.test_file).tasks))
+            self.assertIsNone(win._resizing_edge)
+
+            # The catchment still works over the main window's own children.
+            viewport = win.task_list_widget.viewport()
+            edge = viewport.mapFromGlobal(win.mapToGlobal(QPoint(win.width() - 4, 300)))
+            QTest.mousePress(viewport, Qt.LeftButton, Qt.NoModifier, edge)
+            self.assertEqual(win._resizing_edge, (False, True, False, False))
+            QTest.mouseRelease(viewport, Qt.LeftButton, Qt.NoModifier, edge)
+            self.assertIsNone(win._resizing_edge)
+        finally:
+            win.tray_icon.hide()
+            win.hide()
+            win.deleteLater()
+            self.app.processEvents()
+
     def test_long_task_and_project_fit_after_window_resize(self):
         from app_gui import TaskFlowApp
         project = 'Uzun proje adı ' * 12

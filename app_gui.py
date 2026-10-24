@@ -1078,6 +1078,10 @@ class TaskFlowApp(QMainWindow):
         mouse_types = (QEvent.MouseButtonPress, QEvent.MouseMove, QEvent.MouseButtonRelease)
         if event.type() not in mouse_types or not self.isVisible():
             return super().eventFilter(obj, event)
+        # Popup menus and dialogs can overlap the window edge; their clicks are never resizes.
+        owner = obj.window() if isinstance(obj, QWidget) else obj
+        if owner is not self and owner is not self.windowHandle():
+            return super().eventFilter(obj, event)
 
         try:
             global_pos = event.globalPos()
