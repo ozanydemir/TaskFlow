@@ -173,3 +173,45 @@ Verification:
 - No source code or runtime payload changed, so Graphify was not rerun.
 
 Next: on this workstation, bind each project once through the project menu.
+
+Correction: that setup was started from inside the Claude desktop app's package
+context. Windows redirected the new roaming TaskFlow folder into the package's
+private cache, so the "new SQLite store" above was that redirected copy, not the
+user's real profile store. The installed program files and shortcuts were real.
+
+## 2026-10-24: task menu clicks swallowed at the window edge
+
+User report: task edit and delete did not work in the installed app. Cause: the
+application-wide resize filter mapped every mouse press, including presses in
+popup menus and dialogs, into main-window coordinates. On a real screen the task
+menu opens across the window's right 16px resize catchment, and that band covers
+the "Görevi düzenle" / "Görevi sil" labels, so those presses started a resize and
+the menu stayed open. The task store was not involved. The filter now handles only
+events whose target belongs to the main window; edge resizing over the window's
+own children is unchanged.
+
+Verification:
+- A real-screen probe with a disposable store found presses swallowed in every
+  task menu row before the fix and none after it.
+- New regression test fails on the old filter and passes with the fix; it also
+  checks that the edge catchment still starts a resize. All 52 tests passed.
+- Frozen --verify-build passed with disposable data. Installer payloads match the
+  built binaries and the packaged app_gui contains the fix. The frozen agent read
+  a disposable store.
+- The new setup replaced the installed app on the real profile (launched through
+  Explorer, outside the package context). The app restarted at 440x640 and the
+  redirected copy was not touched. The real store was not read by the agent.
+- Not verified: a manual click on edit/delete in the installed app, and manual
+  edge resizing. These need the user's check.
+- Graphify output does not exist on this workstation, so it was not updated.
+
+Local build (PyInstaller 6.22.3; the legacy runtime DLL backup is absent here,
+so sizes differ from v1.2.0):
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist/TaskFlow.exe | 39568715 | e9f9f21f2d2c3825b24ca183248751712dc29f0fad5b76989ba9ac3aa85f9eb0 |
+| dist_agent/TaskFlowAgent.exe | 8381657 | cb5492c83a9033850d2c2df3f014af9dda48ed7dc818adb3f6a254a99101f934 |
+| dist_installer/TaskFlowSetup.exe | 59006161 | 01beaa07800d1a4233ac3e69315d84e0998071b3c6e46c9f57d79f3184a91f41 |
+
+Not published: no tag or GitHub Release was created, and Windows CI has not run
+for this commit.
