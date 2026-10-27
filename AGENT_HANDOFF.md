@@ -201,8 +201,8 @@ Verification:
 - The new setup replaced the installed app on the real profile (launched through
   Explorer, outside the package context). The app restarted at 440x640 and the
   redirected copy was not touched. The real store was not read by the agent.
-- Not verified: a manual click on edit/delete in the installed app, and manual
-  edge resizing. These need the user's check.
+- The user confirmed that edit and delete now work in the installed app.
+  Manual edge resizing has not been confirmed.
 - Graphify output does not exist on this workstation, so it was not updated.
 
 Local build (PyInstaller 6.22.3; the legacy runtime DLL backup is absent here,
