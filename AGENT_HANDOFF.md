@@ -221,3 +221,31 @@ Windows run 41018666654 (manual dispatch) succeeded at b3dfb4c: all 52 tests,
 including the new menu-edge regression test, agent/application/installer builds,
 frozen GUI verification and artifact upload passed. Release asset attachment was
 skipped because this was not a tag build.
+
+## 2026-10-28: local build and installation of b3dfb4c
+
+The checkout was fast-forwarded to origin/master (b3dfb4c, includes the task
+menu fix). Build dependencies were installed (PyInstaller 6.22.3). There was no
+previous installation or data store on this workstation.
+
+Verification:
+- All 52 tests passed with QT_QPA_PLATFORM=offscreen.
+- Frozen --verify-build passed with disposable data; the frozen agent ran --help.
+- The setup was launched through Explorer, outside the Claude desktop package
+  context. Installed TaskFlow.exe and TaskFlowAgent.exe match the built digests.
+  The desktop and Start menu shortcuts point to the installed app. The real
+  %APPDATA%\TaskFlow\data.sqlite3 was created; the package's redirected folder
+  holds only the verify-build startup log. The per-user startup entry with
+  --minimized was added.
+- The app process responds and its main window is 440x640. When checked it was
+  hidden to the tray; the user has not visually confirmed it yet.
+- No projects were bound and the bridge did not read the real store.
+- Graphify was not rerun because no source code changed.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist/TaskFlow.exe | 39567664 | 8bc8c76a16b4da07ddedc0238c4caa67f132ed0a0648b42ccb59cd2107d4626b |
+| dist_agent/TaskFlowAgent.exe | 8381726 | b6564aca26d07150c7c506064a9fff766f6918f9efcfe21fdc6ef88deaf210b2 |
+| dist_installer/TaskFlowSetup.exe | 59004400 | 5a274318b6dabccbd7cf2f46119754031d22866c373b41166f7ee33adcfca5b1 |
+
+Not published: no tag or GitHub Release was created.
