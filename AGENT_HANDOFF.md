@@ -213,5 +213,11 @@ so sizes differ from v1.2.0):
 | dist_agent/TaskFlowAgent.exe | 8381657 | cb5492c83a9033850d2c2df3f014af9dda48ed7dc818adb3f6a254a99101f934 |
 | dist_installer/TaskFlowSetup.exe | 59006161 | 01beaa07800d1a4233ac3e69315d84e0998071b3c6e46c9f57d79f3184a91f41 |
 
-Not published: no tag or GitHub Release was created, and Windows CI has not run
-for this commit.
+Not published: no tag or GitHub Release was created.
+
+### Task menu fix Windows CI closure
+
+Windows run 41018666654 (manual dispatch) succeeded at b3dfb4c: all 52 tests,
+including the new menu-edge regression test, agent/application/installer builds,
+frozen GUI verification and artifact upload passed. Release asset attachment was
+skipped because this was not a tag build.
