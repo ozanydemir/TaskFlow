@@ -45,7 +45,7 @@ def run(args):
         raise ValueError('Belirtilen görev veritabanı bulunamadı.')
     manager = TaskManager(args.db)
     if args.command == 'projects':
-        return {'projects': [{'name': p, 'binding': manager.bindings.get(p)} for p in manager.projects]}
+        return {'projects': [{'name': p, 'id': manager.project_ids.get(p), 'binding': manager.bindings.get(p)} for p in manager.projects]}
     if args.project not in manager.projects:
         raise ValueError('TaskFlow projesi bulunamadı.')
     if args.command == 'bind':

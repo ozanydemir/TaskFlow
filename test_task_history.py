@@ -229,5 +229,54 @@ class TestTaskHistory(unittest.TestCase):
             app.processEvents()
 
 
+    def test_projects_keep_stable_ids_and_bound_ids_are_reused(self):
+        self.manager.add_task('Loose task', 'Other')
+        ids = dict(self.manager.project_ids)
+        self.assertEqual(ids['Demo'], self.manager.bindings['Demo']['project_id'])
+        self.assertEqual(len(set(ids.values())), 2)
+        self.assertEqual(TaskManager(self.manager.db_file).project_ids, ids)
+        repo = self.root / 'other-repo'
+        (repo / '.git').mkdir(parents=True)
+        self.assertEqual(self.manager.bind_project('Other', repo)['project_id'], ids['Other'])
+        self.manager.delete_project('Other')
+        self.manager.add_project('Other')
+        self.assertNotEqual(self.manager.project_ids['Other'], ids['Other'])
+
+    def test_unbound_history_keeps_project_id_through_binding(self):
+        self.manager.add_project('Later')
+        task = self.manager.add_task('Unbound fix', 'Later')
+        claim = self.manager.claim_task('Later', task['id'], task['revision'], 'demo-session')
+        self.manager.report_task('Later', task['id'], claim['revision'], claim['claim_token'],
+                                 'completed', 'Done', 'Demo checks passed')
+        self.assertEqual(len(self.manager.get_history('Later')), 1)
+        repo = self.root / 'later-repo'
+        (repo / '.git').mkdir(parents=True)
+        self.manager.bind_project('Later', repo)
+        self.assertEqual(len(self.manager.get_history('Later')), 1)
+        self.assertEqual(len(self.manager.get_history('Demo')), 0)
+
+    def test_project_id_migration_reuses_binding_and_tags_legacy_events(self):
+        old = self.root / 'journal.sqlite3'
+        binding = {'repo_path': str(self.repo), 'brain_dir': '', 'project_id': 'bound-id'}
+        event = {'id': 'e1', 'kind': 'report', 'recorded_at': '01.10.2026 12:00',
+                 'task': {'id': 't1', 'title': 'Old', 'project': 'Loose', 'status': 'completed'}}
+        with closing(sqlite3.connect(old)) as conn, conn:
+            conn.executescript("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+                               "CREATE TABLE tasks (id TEXT PRIMARY KEY, position INTEGER NOT NULL, payload TEXT NOT NULL);"
+                               "CREATE TABLE projects (name TEXT PRIMARY KEY, position INTEGER NOT NULL, binding TEXT);"
+                               "CREATE TABLE settings (key TEXT PRIMARY KEY, payload TEXT NOT NULL);"
+                               "CREATE TABLE task_events (id TEXT PRIMARY KEY, project_id TEXT, task_id TEXT NOT NULL, payload TEXT NOT NULL);"
+                               "INSERT INTO meta VALUES ('schema','1'); INSERT INTO meta VALUES ('change','0');"
+                               "INSERT INTO meta VALUES ('journal_initialized','1');"
+                               "INSERT INTO projects VALUES ('Loose',1,NULL);")
+            conn.execute("INSERT INTO projects VALUES ('Bound',0,?)", (json.dumps(binding),))
+            conn.execute('INSERT INTO task_events VALUES (?,?,?,?)', ('e1', None, 't1', json.dumps(event)))
+        manager = TaskManager(old)
+        self.assertEqual(manager.project_ids['Bound'], 'bound-id')
+        self.assertEqual([e['id'] for e in manager.get_history('Loose')], ['e1'])
+        with closing(sqlite3.connect(old)) as conn:
+            self.assertEqual(conn.execute('SELECT project_id FROM task_events').fetchone()[0], manager.project_ids['Loose'])
+
+
 if __name__ == '__main__':
     unittest.main()

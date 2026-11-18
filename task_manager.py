@@ -44,7 +44,9 @@ class TaskManager:
         self.db_file = str(source if source.suffix in ('.db', '.sqlite3') else source.with_suffix('.sqlite3'))
         Path(self.db_file).parent.mkdir(parents=True, exist_ok=True)
         self.sync_errors = []
+        self._project_ids_ready = False
         self._initialize(source)
+        self._initialize_project_ids()
         self._initialize_journal()
         self.load()
 
@@ -58,6 +60,8 @@ class TaskManager:
             else:
                 conn.execute('BEGIN')
             yield conn
+            if write and self._project_ids_ready:
+                self._assign_project_ids(conn)
             if write and bump:
                 conn.execute("UPDATE meta SET value=CAST(value AS INTEGER)+1 WHERE key='change'")
             conn.commit()
@@ -103,11 +107,46 @@ class TaskManager:
                 conn.execute('INSERT INTO settings VALUES (?,?)', (key, self._json(value)))
             conn.execute("INSERT INTO meta VALUES ('schema','1')")
 
+    def _initialize_project_ids(self):
+        # Additive migration: each project keeps one stable id for history and cloud sync.
+        # A separate table keeps the v1 projects layout readable by older builds.
+        with self._connection(write=True, bump=False) as conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS project_ids (name TEXT PRIMARY KEY, uid TEXT NOT NULL UNIQUE)')
+            self._assign_project_ids(conn)
+        self._project_ids_ready = True
+
+    @staticmethod
+    def _assign_project_ids(conn):
+        # Bound projects reuse their binding id so TODO.md markers and the journal stay valid.
+        projects = dict(conn.execute('SELECT name,binding FROM projects'))
+        known = dict(conn.execute('SELECT name,uid FROM project_ids'))
+        for name in known.keys() - projects.keys():
+            conn.execute('DELETE FROM project_ids WHERE name=?', (name,))
+        for name, binding in projects.items():
+            if name not in known:
+                uid = json.loads(binding)['project_id'] if binding else str(uuid.uuid4())
+                conn.execute('INSERT INTO project_ids VALUES (?,?)', (name, uid))
+
+    def _project_uid(self, conn, name):
+        if not name:
+            return None
+        self._assign_project_ids(conn)
+        row = conn.execute('SELECT uid FROM project_ids WHERE name=?', (name,)).fetchone()
+        return row[0] if row else None
+
     def _initialize_journal(self):
         # Additive v1 migration: preserve all task payloads and settings.
         with self._connection(write=True, bump=False) as conn:
             conn.execute('CREATE TABLE IF NOT EXISTS task_events '
                          '(id TEXT PRIMARY KEY, project_id TEXT, task_id TEXT NOT NULL, payload TEXT NOT NULL)')
+            if not conn.execute("SELECT 1 FROM meta WHERE key='journal_project_ids'").fetchone():
+                # Attach entries recorded before every project had an id, once.
+                uids = dict(conn.execute('SELECT name,uid FROM project_ids'))
+                for event_id, payload in conn.execute('SELECT id,payload FROM task_events WHERE project_id IS NULL').fetchall():
+                    uid = uids.get(json.loads(payload)['task'].get('project'))
+                    if uid:
+                        conn.execute('UPDATE task_events SET project_id=? WHERE id=?', (uid, event_id))
+                conn.execute("INSERT INTO meta VALUES ('journal_project_ids','1')")
             if conn.execute("SELECT 1 FROM meta WHERE key='journal_initialized'").fetchone():
                 return
             for payload, in conn.execute('SELECT payload FROM tasks').fetchall():
@@ -119,8 +158,7 @@ class TaskManager:
             conn.execute("INSERT INTO meta VALUES ('journal_initialized','1')")
 
     def _record_event(self, conn, task, kind, result=None):
-        row = conn.execute('SELECT binding FROM projects WHERE name=?', (task.get('project'),)).fetchone()
-        project_id = json.loads(row[0])['project_id'] if row and row[0] else None
+        project_id = self._project_uid(conn, task.get('project'))
         snapshot = {k: copy.deepcopy(v) for k, v in task.items() if k not in {'claim_token', 'owner', 'history'}}
         if result is not None:
             snapshot['result'] = copy.deepcopy(result)
@@ -132,10 +170,9 @@ class TaskManager:
 
     def get_history(self, project):
         with self._connection() as conn:
-            binding = self.bindings.get(project)
-            if binding:
-                rows = conn.execute('SELECT payload FROM task_events WHERE project_id=? ORDER BY rowid',
-                                    (binding['project_id'],))
+            uid = self.project_ids.get(project)
+            if uid:
+                rows = conn.execute('SELECT payload FROM task_events WHERE project_id=? ORDER BY rowid', (uid,))
             else:
                 rows = conn.execute('SELECT payload FROM task_events WHERE project_id IS NULL ORDER BY rowid')
             return [event for payload, in rows if (event := json.loads(payload))['task'].get('project') == project]
@@ -178,6 +215,7 @@ class TaskManager:
             self.tasks = [json.loads(row[0]) for row in conn.execute('SELECT payload FROM tasks ORDER BY position,id')]
             self.settings = dict(self.DEFAULT_SETTINGS, **{key: json.loads(value) for key, value in conn.execute('SELECT key,payload FROM settings')})
             self.bindings = {name: json.loads(binding) for name, binding in conn.execute('SELECT name,binding FROM projects WHERE binding IS NOT NULL')}
+            self.project_ids = dict(conn.execute('SELECT name,uid FROM project_ids'))
             self._change = int(conn.execute("SELECT value FROM meta WHERE key='change'").fetchone()[0])
         self._snapshot = copy.deepcopy((self.projects, self.tasks, self.settings))
 
@@ -412,14 +450,13 @@ class TaskManager:
         brain = Path(brain_dir).resolve() if brain_dir else None
         if brain and not (brain / 'PROJECT_CONTEXT.md').is_file():
             raise ValueError('OZI Brain projesinin PROJECT_CONTEXT.md dosyasını içeren klasörü seçin.')
-        binding = {'repo_path': str(repo), 'brain_dir': str(brain) if brain else '', 'project_id': str(uuid.uuid4())}
+        binding = {'repo_path': str(repo), 'brain_dir': str(brain) if brain else ''}
         with self._connection(write=True) as conn:
             row = conn.execute('SELECT binding FROM projects WHERE name=?', (project,)).fetchone()
             if not row:
                 raise ValueError('Önce TaskFlow projesini oluşturun.')
             previous = json.loads(row[0]) if row[0] else None
-            if previous:
-                binding['project_id'] = previous['project_id']
+            binding['project_id'] = previous['project_id'] if previous else self._project_uid(conn, project)
             for name, payload in conn.execute('SELECT name,binding FROM projects WHERE binding IS NOT NULL'):
                 other = json.loads(payload)
                 if name != project and (os.path.normcase(other['repo_path']) == os.path.normcase(str(repo)) or (brain and os.path.normcase(other['brain_dir']) == os.path.normcase(str(brain)))):

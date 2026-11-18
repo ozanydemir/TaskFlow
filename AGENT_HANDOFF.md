@@ -249,3 +249,27 @@ Verification:
 | dist_installer/TaskFlowSetup.exe | 59004400 | 5a274318b6dabccbd7cf2f46119754031d22866c373b41166f7ee33adcfca5b1 |
 
 Not published: no tag or GitHub Release was created.
+
+## 2026-11-17: cloud sync design and stable project ids
+
+The user wants tasks and notes to match across three Windows PCs and chose
+Supabase (free plan) over a file-sync folder. docs/CLOUD_SYNC.md records the
+design: local SQLite stays primary and offline-capable, cloud sync is optional,
+revisions become shared across devices, conflicts use a three-way field merge,
+and repo/OZI bindings and window settings stay device-local.
+
+Step 1 is implemented: every project has a stable id in the additive
+`project_ids` table (the v1 `projects` layout is unchanged). Bound projects
+reuse their binding `project_id`, so TODO.md and history markers do not change.
+Journal events now carry the project id even without a binding; older NULL
+events are attached once (`journal_project_ids` meta flag). `TaskFlowAgent
+projects` also prints `id`.
+
+Verification:
+- All 55 tests passed with QT_QPA_PLATFORM=offscreen, including three new
+  project-id tests. Two of them fail on the previous store code.
+- No build or installation was made for this change. The real store was not
+  opened.
+
+Next: step 2, the sync core tested against a fake server and two disposable
+stores. No Supabase project or account exists yet.
