@@ -16,20 +16,28 @@ class MemoryServer:
         self.events = []
         self.seq = 0
 
-    def pull(self, cursor):
-        records = sorted((r for r in self.records.values() if r['seq'] > cursor), key=lambda r: r['seq'])
-        events = [e for e in self.events if e['seq'] > cursor]
-        return {'records': [self._public(r) for r in records], 'events': [self._public(e) for e in events],
-                'cursor': self.seq}
+    def pull(self, cursor, limit=500):
+        changes = sorted([r for r in self.records.values() if r['seq'] > cursor] +
+                         [e for e in self.events if e['seq'] > cursor], key=lambda item: item['seq'])
+        upto = changes[limit - 1]['seq'] if len(changes) > limit else self.seq
+        page = [item for item in changes if item['seq'] <= upto]
+        return {'records': [self._public(r) for r in page if 'kind' in r],
+                'events': [self._public(e) for e in page if 'kind' not in e],
+                'cursor': upto, 'more': upto < self.seq}
 
-    def push(self, record, base_revision):
+    def push_many(self, items):
         # Accept only a change made on top of the current version; otherwise return that version.
-        current = self.records.get((record['kind'], record['id']))
-        if (current['revision'] if current else None) != base_revision:
-            return {'accepted': False, 'record': self._public(current) if current else None}
-        self.seq += 1
-        self.records[(record['kind'], record['id'])] = dict(copy.deepcopy(record), seq=self.seq)
-        return {'accepted': True, 'record': copy.deepcopy(record)}
+        results = []
+        for item in items:
+            record = item['record']
+            current = self.records.get((record['kind'], record['id']))
+            if (current['revision'] if current else None) != item['base_revision']:
+                results.append({'accepted': False, 'record': self._public(current) if current else None})
+                continue
+            self.seq += 1
+            self.records[(record['kind'], record['id'])] = dict(copy.deepcopy(record), seq=self.seq)
+            results.append({'accepted': True, 'record': copy.deepcopy(record)})
+        return results
 
     def push_events(self, events):
         known = {e['id'] for e in self.events}
@@ -49,6 +57,8 @@ class SyncEngine:
     TASK_STATE = ('status', 'completed', 'completed_at', 'owner', 'claim_token', 'result', 'delivery',
                   'publication_evidence')
     PUSH_ROUNDS = 3
+    RECORD_BATCH = 200
+    EVENT_BATCH = 500
 
     def __init__(self, manager, server):
         self.manager = manager
@@ -130,9 +140,16 @@ class SyncEngine:
     # Pull
 
     def _pull(self):
-        with self.manager._connection() as conn:
-            cursor = int(conn.execute("SELECT value FROM meta WHERE key='sync_cursor'").fetchone()[0])
-        batch = self.server.pull(cursor)
+        changed, more = False, True
+        while more:
+            with self.manager._connection() as conn:
+                cursor = int(conn.execute("SELECT value FROM meta WHERE key='sync_cursor'").fetchone()[0])
+            batch = self.server.pull(cursor)
+            changed |= self._apply_batch(batch)
+            more = batch.get('more', False)
+        return changed
+
+    def _apply_batch(self, batch):
         with self.manager._connection(write=True, bump=False) as conn:
             changed = False
             for record in sorted(batch['records'], key=self._order):
@@ -313,17 +330,24 @@ class SyncEngine:
             elif record['kind'] == 'project':
                 record['revision'] = (base['revision'] if base else 0) + 1
             pending.append((record, base))
+        pending.sort(key=lambda pair: self._order(pair[0]))
         changed, rejected = False, 0
-        for record, base in sorted(pending, key=lambda pair: self._order(pair[0])):
-            response = self.server.push(record, base['revision'] if base else None)
+        for start in range(0, len(pending), self.RECORD_BATCH):
+            chunk = pending[start:start + self.RECORD_BATCH]
+            responses = self.server.push_many([{'record': record, 'base_revision': base['revision'] if base else None}
+                                               for record, base in chunk])
             with self.manager._connection(write=True, bump=False) as conn:
-                if response['accepted']:
-                    self._set_base(conn, response['record'])
-                    continue
-                rejected += 1
-                if response['record'] is None:
-                    conn.execute('DELETE FROM sync_base WHERE kind=? AND id=?', (record['kind'], record['id']))
-                elif self._apply(conn, response['record']):
+                applied = False
+                for (record, _), response in zip(chunk, responses):
+                    if response['accepted']:
+                        self._set_base(conn, response['record'])
+                        continue
+                    rejected += 1
+                    if response['record'] is None:
+                        conn.execute('DELETE FROM sync_base WHERE kind=? AND id=?', (record['kind'], record['id']))
+                    else:
+                        applied |= self._apply(conn, response['record'])
+                if applied:
                     changed = True
                     self._bump(conn)
         return changed, rejected
@@ -334,8 +358,8 @@ class SyncEngine:
                       for i, p, t, payload in conn.execute(
                           'SELECT id,project_id,task_id,payload FROM task_events '
                           'WHERE id NOT IN (SELECT id FROM sync_events) ORDER BY rowid')]
-        if not events:
-            return
-        self.server.push_events(events)
-        with self.manager._connection(write=True, bump=False) as conn:
-            conn.executemany('INSERT OR IGNORE INTO sync_events VALUES (?)', [(e['id'],) for e in events])
+        for start in range(0, len(events), self.EVENT_BATCH):
+            chunk = events[start:start + self.EVENT_BATCH]
+            self.server.push_events(chunk)
+            with self.manager._connection(write=True, bump=False) as conn:
+                conn.executemany('INSERT OR IGNORE INTO sync_events VALUES (?)', [(e['id'],) for e in chunk])

@@ -1,6 +1,6 @@
 # Bulut senkronu (tasarım)
 
-Durum: 1. ve 2. adımlar uygulandı. Senkron çekirdeği (`task_sync.py`) sahte bir sunucuyla test edildi; uygulama henüz buluta bağlanmıyor.
+Durum: 1–3. adımlar uygulandı. Senkron çekirdeği (`task_sync.py`), Supabase şeması (`supabase/taskflow_schema.sql`) ve istemcisi (`supabase_sync.py`) hazır; uygulama henüz buluta bağlanmıyor. Kurulum: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 
 Amaç: aynı kullanıcının birden fazla Windows bilgisayarında görevlerin, notların ve sonuç geçmişinin aynı görünmesi. Senkron isteğe bağlıdır; açılmadığı sürece TaskFlow bugünkü gibi tamamen yerel çalışır.
 
@@ -9,7 +9,7 @@ Amaç: aynı kullanıcının birden fazla Windows bilgisayarında görevlerin, n
 - **Sunucu:** Supabase ücretsiz planı (Postgres + Auth). 3 bilgisayarın kullanımı plan limitlerinin çok altındadır. Bir hafta hiç kullanılmayan ücretsiz proje duraklatılır; veri silinmez, panelden yeniden açılır.
 - **Yerel SQLite kalır.** Uygulama ve agent bağlantı aracı her zaman yerel veritabanını okur ve yazar. Senkron katmanı arka planda yerel değişiklikleri gönderir, uzaktakileri alır. İnternet yokken her şey çalışmaya devam eder.
 - **Ek ağır bağımlılık yok:** Supabase REST ve RPC uç noktaları standart HTTPS ile çağrılır. Uygulama açıkken birkaç saniyede bir değişiklik sorgulanır; anlık bildirim (Realtime) sonra eklenebilir.
-- **Giriş:** Supabase Auth ile e-posta doğrulaması. Oturum yenileme bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur. Supabase proje adresi ve herkese açık istemci anahtarı ilk kurulumda kullanıcı tarafından girilir. Hiçbir anahtar veya kullanıcı verisi bu depoya girmez.
+- **Giriş:** Supabase Auth ile e-postaya gelen 6 haneli kod; şifre yoktur. Oturum yenileme bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur. Supabase proje adresi ve herkese açık istemci anahtarı ilk kurulumda kullanıcı tarafından girilir. Hiçbir anahtar veya kullanıcı verisi bu depoya girmez.
 - **Erişim:** her bulut tablosunda satır bazlı erişim kuralı (RLS) olur; satırlara yalnızca sahibi olan hesap erişir.
 
 ## Senkronlanan ve cihaza özel kalan veriler
@@ -37,13 +37,15 @@ Agent sonucu, durum ve üstlenme alanları birlikte değerlendirilir; iki farkl�
 
 ## Sunucu sözleşmesi
 
-`MemoryServer` sözleşmenin referansıdır; Supabase arka ucu aynı üç çağrıyı sunar:
+`MemoryServer` sözleşmenin referansıdır; `SupabaseClient` aynı üç çağrıyı `taskflow_pull`, `taskflow_push_many` ve `taskflow_push_events` fonksiyonlarıyla sunar:
 
 | Çağrı | Davranış |
 | --- | --- |
-| `pull(cursor)` | `cursor` sonrasında değişen kayıtların son sürümleri, yeni geçmiş kayıtları ve yeni `cursor` |
-| `push(record, base_revision)` | Bulut sürümü `base_revision` ise kaydı kabul eder; değilse güncel sürümü döndürür |
-| `push_events(events)` | Geçmiş kayıtlarını kimliğe göre bir kez ekler |
+| `pull(cursor)` | `cursor` sonrasında değişen kayıtların son sürümleri ve yeni geçmiş kayıtları; sayfalıdır (`more`) |
+| `push_many(items)` | Her `{record, base_revision}` için: bulut sürümü `base_revision` ise kabul eder, değilse güncel sürümü döndürür; en fazla 200 kayıt |
+| `push_events(events)` | Geçmiş kayıtlarını kimliğe göre bir kez ekler; en fazla 500 kayıt |
+
+Sunucu her kullanıcı için tek bir sıra sayacı tutar ve yazma sırasında bu satırı kilitler. Böylece sıra numaraları işlem sırasıyla aynıdır ve geç biten bir yazma sonraki eşitlemede atlanmaz. Tablolara doğrudan yazma yetkisi yoktur; fonksiyonlar oturumdaki kullanıcının kimliğiyle çalışır.
 
 Kayıt biçimi: `{kind: project|task, id, revision, deleted, data}`. Görev verisi projeyi ad yerine `project_id` ile taşır. Yerelde son eşitlenen sürümler `sync_base`, gönderilen veya alınan geçmiş kayıtları `sync_events` tablosunda tutulur.
 
@@ -63,6 +65,6 @@ Bir bilgisayar buluta ilk katıldığında, buluta henüz gönderilmemiş aynı 
 
 1. **Kalıcı proje kimlikleri:** uygulandı.
 2. **Senkron çekirdeği:** uygulandı. Taban sürümler, değişiklik tespiti ve üç yönlü birleştirme iki ayrı geçici veritabanı ve sahte sunucuyla test edildi.
-3. **Supabase şeması:** tablolar, RLS kuralları ve sürüm kontrollü gönderim fonksiyonu.
-4. **Arayüz:** senkron ayarı, giriş, durum göstergesi (son eşitleme, hata).
+3. **Supabase şeması ve istemcisi:** uygulandı. Şema gerçek bir projede henüz çalıştırılmadı; `python supabase_sync.py check` ile doğrulanacak.
+4. **Arayüz:** senkron ayarı, giriş, oturumun Windows Kimlik Bilgisi Yöneticisi'nde saklanması, ilk katılım yedeği, arka planda eşitleme, durum göstergesi; bağlantı aracında üstlenmeden önce eşitleme.
 5. **Gerçek kurulum:** önce bu bilgisayarda iki geçici veritabanıyla, sonra diğer bilgisayarlarda gerçek verilerle ilk katılım.

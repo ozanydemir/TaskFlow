@@ -216,5 +216,20 @@ class TestTaskSync(unittest.TestCase):
             self.assertEqual(conn.execute("SELECT value FROM meta WHERE key='change'").fetchone()[0], change)
 
 
+    def test_large_first_join_uses_batches_and_pages(self):
+        SyncEngine.RECORD_BATCH, SyncEngine.EVENT_BATCH = 7, 5
+        self.addCleanup(setattr, SyncEngine, 'RECORD_BATCH', 200)
+        self.addCleanup(setattr, SyncEngine, 'EVENT_BATCH', 500)
+        pull = self.server.pull
+        self.server.pull = lambda cursor: pull(cursor, limit=4)
+        for index in range(30):
+            task = self.a.add_task('Görev {}'.format(index), 'Demo')
+            if index % 3 == 0:
+                self.a.toggle_task(task['id'])
+        self.settle()
+        self.assertEqual(len(self.b.tasks), 30)
+        self.assertEqual(len(self.b.get_history('Demo')), 10)
+        self.assert_converged()
+
 if __name__ == '__main__':
     unittest.main()

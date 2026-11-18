@@ -301,3 +301,31 @@ build, installation or real-store access.
 Known gaps for later steps: a corrupt OZI marker during a remote project
 delete aborts that pull until fixed; claims are authoritative only after sync.
 Next: step 3, the Supabase schema, RLS and versioned push function.
+
+## 2026-11-18: Supabase schema and client (step 3)
+
+- supabase/taskflow_schema.sql: taskflow_records, taskflow_events and a
+  per-user taskflow_cursors row. RLS allows reading own rows only; direct table
+  writes are revoked. security definer functions (empty search_path) check
+  auth.uid(): taskflow_push_many (base-revision check, max 200),
+  taskflow_push_events (idempotent, max 500), taskflow_pull (paged by seq).
+  Seq is taken from the locked cursor row, so seq order equals commit order.
+- SyncEngine contract changed from push to push_many with paged pull; the
+  MemoryServer reference follows it.
+- supabase_sync.py: SupabaseClient (stdlib only) with email-code sign-in
+  (/auth/v1/otp, /auth/v1/verify, refresh token grant), one refresh-and-retry
+  on 401/403, https-only URL, secret keys rejected. `python supabase_sync.py
+  check` runs a two-store round trip against a real project; the user types the
+  emailed code.
+- docs/SUPABASE_SETUP.md: user setup steps (project, SQL, Magic Link template
+  with {{ .Token }}, publishable key, check command).
+
+Verification: 75 tests passed with QT_QPA_PLATFORM=offscreen, including a
+batching/paging sync test and 7 client tests against a fake HTTP backend.
+test_supabase_sync was added to README and CI.
+
+Not verified: the SQL has not run on a real Postgres (no local server; a SQL
+parser install was not permitted), and the auth endpoints have only been
+exercised against the fake backend. Both are checked by the setup guide's check
+command once the user creates the project. No build or installation.
+Next: user creates the Supabase project and runs the check; then step 4.
