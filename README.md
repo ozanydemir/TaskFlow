@@ -59,7 +59,7 @@ Bu komutlar `dist_agent\TaskFlowAgent.exe`, `dist\TaskFlow.exe` ve iki aracÄ± iÃ
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_app test_agent_bridge test_taskflow_skill test_task_history -v
+python -m unittest test_app test_agent_bridge test_taskflow_skill test_task_history test_task_sync -v
 python preview_design.py
 ```
 

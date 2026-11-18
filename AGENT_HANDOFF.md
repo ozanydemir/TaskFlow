@@ -273,3 +273,31 @@ Verification:
 
 Next: step 2, the sync core tested against a fake server and two disposable
 stores. No Supabase project or account exists yet.
+
+## 2026-11-18: sync core (step 2)
+
+task_sync.py adds SyncEngine and MemoryServer, the reference server contract
+(pull by cursor, push with base revision, idempotent event push). Nothing in
+the app or bridge imports it yet, so packaged builds are unchanged.
+
+- Local state: `sync_base` (last server version per record), `sync_events`
+  (journal entries known to the server), meta `sync_cursor`. Dirty records are
+  found by comparing the local cloud form with the base, so no change queue.
+- Tasks merge three ways; the claim/status/result fields merge as one group.
+  The server version wins a same-field conflict and the local version is kept
+  as a `sync_conflict` journal event (a lost claim alone is not journaled).
+  A real merge bumps the revision and requeues an in_progress claim, matching
+  local edit semantics. Deletion wins over a concurrent edit.
+- Projects: an unsynced same-name local project adopts the cloud id (events,
+  binding id and OZI markers move); remote renames and deletions apply locally;
+  bindings and settings never leave the device.
+
+Verification: 67 tests passed with QT_QPA_PLATFORM=offscreen, including 12 new
+two-store sync tests (field merge, conflicts, competing claims, delete vs edit,
+archive/restore, adoption with markers, rename/delete, device-local data,
+offline, quiet repeat sync). test_task_sync was added to README and CI. No
+build, installation or real-store access.
+
+Known gaps for later steps: a corrupt OZI marker during a remote project
+delete aborts that pull until fixed; claims are authoritative only after sync.
+Next: step 3, the Supabase schema, RLS and versioned push function.

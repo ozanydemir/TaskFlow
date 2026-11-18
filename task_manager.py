@@ -586,7 +586,8 @@ class TaskManager:
         kinds = {'report': 'Agent sonucu', 'imported_report': 'Önceki agent sonucu',
                  'manual_completion': 'Manuel durum değişikliği', 'imported_completion': 'Önceki tamamlanma',
                  'archived': 'Arşivlendi', 'restored': 'Arşivden geri getirildi', 'published': 'Yayın doğrulandı',
-                 'requeued': 'Tekrar sıraya alındı', 'deleted': 'Görev silindi'}
+                 'requeued': 'Tekrar sıraya alındı', 'deleted': 'Görev silindi',
+                 'sync_conflict': 'Senkron çakışması; bu cihazdaki sürüm saklandı'}
         for payload, in conn.execute('SELECT payload FROM task_events WHERE project_id=? ORDER BY rowid',
                                      (binding['project_id'],)):
             event = json.loads(payload)
