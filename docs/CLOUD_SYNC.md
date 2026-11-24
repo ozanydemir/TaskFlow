@@ -9,7 +9,7 @@ Amaç: aynı kullanıcının birden fazla Windows bilgisayarında görevlerin, n
 - **Sunucu:** Supabase ücretsiz planı (Postgres + Auth). 3 bilgisayarın kullanımı plan limitlerinin çok altındadır. Bir hafta hiç kullanılmayan ücretsiz proje duraklatılır; veri silinmez, panelden yeniden açılır.
 - **Yerel SQLite kalır.** Uygulama ve agent bağlantı aracı her zaman yerel veritabanını okur ve yazar. Senkron katmanı arka planda yerel değişiklikleri gönderir, uzaktakileri alır. İnternet yokken her şey çalışmaya devam eder.
 - **Ek ağır bağımlılık yok:** Supabase REST ve RPC uç noktaları standart HTTPS ile çağrılır. Uygulama açıkken birkaç saniyede bir değişiklik sorgulanır; anlık bildirim (Realtime) sonra eklenebilir.
-- **Giriş:** Supabase Auth ile e-postaya gelen 6 haneli kod; şifre yoktur. Oturum yenileme bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur. Supabase proje adresi ve herkese açık istemci anahtarı ilk kurulumda kullanıcı tarafından girilir. Hiçbir anahtar veya kullanıcı verisi bu depoya girmez.
+- **Giriş:** Supabase Auth'un standart e-posta bağlantısı, PKCE ile; şifre yoktur. Bağlantı aynı bilgisayarda açılır ve `127.0.0.1:47615` üzerindeki tek seferlik alıcıya döner; kod, girişi başlatan işlemdeki doğrulayıcı olmadan kullanılamaz. Oturum yenileme bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur. Supabase proje adresi ve herkese açık istemci anahtarı ilk kurulumda kullanıcı tarafından girilir. Hiçbir anahtar veya kullanıcı verisi bu depoya girmez.
 - **Erişim:** her bulut tablosunda satır bazlı erişim kuralı (RLS) olur; satırlara yalnızca sahibi olan hesap erişir.
 
 ## Senkronlanan ve cihaza özel kalan veriler
@@ -65,6 +65,6 @@ Bir bilgisayar buluta ilk katıldığında, buluta henüz gönderilmemiş aynı 
 
 1. **Kalıcı proje kimlikleri:** uygulandı.
 2. **Senkron çekirdeği:** uygulandı. Taban sürümler, değişiklik tespiti ve üç yönlü birleştirme iki ayrı geçici veritabanı ve sahte sunucuyla test edildi.
-3. **Supabase şeması ve istemcisi:** uygulandı. Şema gerçek bir projede henüz çalıştırılmadı; `python supabase_sync.py check` ile doğrulanacak.
+3. **Supabase şeması ve istemcisi:** uygulandı ve gerçek bir projede (Frankfurt, ücretsiz plan) `python supabase_sync.py check` ile doğrulandı: e-posta bağlantısıyla giriş, gönderme, alma, iki cihaz birleştirmesi ve silme.
 4. **Arayüz:** senkron ayarı, giriş, oturumun Windows Kimlik Bilgisi Yöneticisi'nde saklanması, ilk katılım yedeği, arka planda eşitleme, durum göstergesi; bağlantı aracında üstlenmeden önce eşitleme.
 5. **Gerçek kurulum:** önce bu bilgisayarda iki geçici veritabanıyla, sonra diğer bilgisayarlarda gerçek verilerle ilk katılım.

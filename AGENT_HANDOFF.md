@@ -329,3 +329,28 @@ parser install was not permitted), and the auth endpoints have only been
 exercised against the fake backend. Both are checked by the setup guide's check
 command once the user creates the project. No build or installation.
 Next: user creates the Supabase project and runs the check; then step 4.
+
+## 2026-11-24: real Supabase project and email-link sign-in
+
+- Email templates cannot be edited on the free plan without custom SMTP, so
+  the 6-digit code flow was replaced. supabase_sync.py now uses the default
+  magic link with PKCE: send_link (S256 challenge, redirect_to) and finish_link
+  (grant_type=pkce). LinkCallback is a one-shot receiver on
+  127.0.0.1:47615/taskflow-auth that returns the code or the link error and
+  always closes.
+- A real project was created by the user (free plan, Central EU Frankfurt). The
+  schema ran in the SQL editor and was checked: functions are security definer,
+  authenticated can execute and anon cannot, taskflow_next_seq is not callable
+  by clients, RLS is on, authenticated has no direct insert. Redirect URL
+  `http://127.0.0.1:47615/**` was added; Site URL left as default. The project
+  URL and keys are not stored in this repository.
+- docs/SUPABASE_SETUP.md and docs/CLOUD_SYNC.md describe the link flow, the
+  redirect URL, region choice and new failure messages.
+
+Verification: `python supabase_sync.py check` against the real project printed
+"Supabase senkron denemesi başarılı" after the user opened the emailed link on
+this PC (real sign-in, push, pull, two-store merge, delete). 77 tests passed
+with QT_QPA_PLATFORM=offscreen (9 client tests incl. PKCE and the callback).
+No build or installation.
+Next: step 4 (GUI sync settings, sign-in, Credential Manager session,
+pre-sync backup, background sync, status, sync before bridge claims).

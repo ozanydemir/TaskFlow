@@ -4,8 +4,9 @@ Bu adımlar bulut senkronu için bir kez yapılır. Tasarım ayrıntıları içi
 
 ## 1. Proje oluştur
 
-1. [supabase.com](https://supabase.com) adresinde ücretsiz hesap açın ve **New project** ile bir proje oluşturun. Bölge olarak size yakın olanı seçin (örneğin Frankfurt).
-2. Veritabanı şifresini güvenli bir yerde saklayın. TaskFlow bu şifreyi kullanmaz.
+1. [supabase.com](https://supabase.com) adresinde ücretsiz hesap açın ve **New project** ile bir proje oluşturun. Bölgeyi kendiniz seçin (örneğin **Central EU (Frankfurt)**). Otomatik seçim uzak bir bölge verebilir ve bölge sonradan değiştirilemez.
+2. Data API açık kalmalıdır; TaskFlow fonksiyonları bu API üzerinden çağırır.
+3. Veritabanı şifresini güvenli bir yerde saklayın. TaskFlow bu şifreyi kullanmaz.
 
 ## 2. Şemayı kur
 
@@ -15,15 +16,14 @@ Bu adımlar bulut senkronu için bir kez yapılır. Tasarım ayrıntıları içi
 
 Şema üç tablo ve üç fonksiyon oluşturur. Tablolara doğrudan yazılamaz; yazma işlemleri sürüm kontrolü yapan fonksiyonlardan geçer. Her satıra yalnızca sahibi olan hesap erişir.
 
-## 3. E-posta kodunu aç
+## 3. Giriş bağlantısının dönüş adresine izin ver
 
-TaskFlow giriş için e-postaya gelen 6 haneli kodu kullanır; şifre yoktur.
+TaskFlow giriş için Supabase'in standart e-posta bağlantısını kullanır; şifre yoktur ve e-posta şablonu değiştirilmez. Bağlantı aynı bilgisayarda açıldığında tarayıcı, TaskFlow'un yalnızca giriş sırasında açık tuttuğu `127.0.0.1` adresine döner. Bağlantıdaki kod, girişi başlatan TaskFlow işlemindeki gizli doğrulayıcı olmadan işe yaramaz (PKCE).
 
-1. **Authentication** → **Emails** (veya **Email Templates**) → **Magic Link** şablonunu açın.
-2. Şablona kodu ekleyin, örneğin: `<p>TaskFlow giriş kodunuz: {{ .Token }}</p>`
-3. Kaydedin.
+1. **Authentication** → **URL Configuration** → **Redirect URLs** → **Add URL**.
+2. `http://127.0.0.1:47615/**` girip **Save URLs** düğmesine basın.
 
-Kod varsayılan olarak 1 saat geçerlidir ve en fazla dakikada bir istenebilir. Supabase'in yerleşik e-posta servisi saatte yalnızca birkaç e-posta gönderir. Yeni kod gelmezse biraz bekleyip tekrar deneyin.
+Site URL değiştirilmez. Bağlantı varsayılan olarak 1 saat geçerlidir ve en fazla dakikada bir istenebilir. Supabase'in yerleşik e-posta servisi saatte yalnızca birkaç e-posta gönderir; yeni bağlantı gelmezse biraz bekleyin ve spam klasörüne bakın.
 
 ## 4. Bağlantı bilgilerini al
 
@@ -42,7 +42,7 @@ TaskFlow kaynak klasöründe:
 python supabase_sync.py check --url 'https://<proje>.supabase.co' --key 'sb_publishable_...' --email '<e-posta adresiniz>'
 ```
 
-Komut e-postanıza kod gönderir ve kodu sorar. Ardından iki geçici veritabanıyla görev ekleme, iki cihazdan düzenleme, birleştirme ve silmeyi gerçek projede dener. Gerçek TaskFlow görevlerinize dokunmaz. Deneme görevi sonunda silinir; bulutta yalnızca küçük silinme işaretleri kalır.
+Komut e-postanıza giriş bağlantısı gönderir ve 10 dakika bekler. Bağlantıyı aynı bilgisayarda açın; tarayıcıda "Giriş tamamlandı" görünür. Ardından iki geçici veritabanıyla görev ekleme, iki cihazdan düzenleme, birleştirme ve silmeyi gerçek projede dener. Gerçek TaskFlow görevlerinize dokunmaz. Deneme görevi sonunda silinir; bulutta yalnızca küçük silinme işaretleri kalır.
 
 Başarılı olursa şu satır görünür: `Supabase senkron denemesi başarılı`.
 
@@ -51,7 +51,10 @@ Sorun olursa:
 | Hata | Neden |
 | --- | --- |
 | `Could not find the function` | Şema kurulmamış veya SQL çalışırken hata vermiş |
-| `Token has expired or is invalid` | Kod yanlış veya süresi dolmuş; komutu yeniden çalıştırın |
+| Bağlantı `localhost:3000` adresine gidiyor | Dönüş adresi 3. adımdaki listede yok |
+| `Email link is invalid or has expired` | Bağlantı eski veya ikinci kez açıldı; komutu yeniden çalıştırın |
+| `invalid flow state` | Bağlantı, onu isteyen komut kapandıktan sonra açıldı; komutu yeniden çalıştırın |
+| `Giriş bağlantısı zamanında açılmadı` | 10 dakika içinde açılmadı veya başka bilgisayarda açıldı |
 | `email rate limit exceeded` | Yerleşik e-posta servisi limiti; bir süre bekleyin |
 | `permission denied` | Şemanın son bölümü (yetkiler) çalışmamış |
 

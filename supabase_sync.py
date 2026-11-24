@@ -1,11 +1,19 @@
-"""Supabase transport and email-code sign-in for TaskFlow sync. Standard library only.
+"""Supabase transport and email-link sign-in for TaskFlow sync. Standard library only.
 
 The client implements the SyncEngine server contract through the functions in
 supabase/taskflow_schema.sql. Only the project URL and the publishable key are needed;
 a secret or service_role key must never be used here.
+
+Sign-in uses the default Supabase magic link with PKCE: the link redirects to a one-shot
+receiver on 127.0.0.1, and the returned code is useless without this process's verifier.
 """
 import argparse
+import base64
+import hashlib
+import html
+import http.server
 import json
+import secrets
 import sys
 import tempfile
 import time
@@ -23,6 +31,63 @@ class SupabaseError(OSError):
 
 class SupabaseAuthError(SupabaseError):
     """The session is missing or was rejected; the user must sign in again."""
+
+
+CALLBACK_PORT = 47615
+CALLBACK_PATH = '/taskflow-auth'
+
+
+class LinkCallback:
+    """Receives the sign-in link redirect once, on this computer only."""
+    PAGE = ('<!doctype html><meta charset="utf-8"><title>TaskFlow</title>'
+            '<body style="font-family:Segoe UI,sans-serif;padding:40px"><h2>{}</h2><p>{}</p></body>')
+
+    def __init__(self, port=CALLBACK_PORT):
+        self.query = None
+        callback = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                parsed = urllib.parse.urlparse(self.path)
+                if parsed.path != CALLBACK_PATH:
+                    self.send_error(404)
+                    return
+                callback.query = urllib.parse.parse_qs(parsed.query)
+                if 'code' in callback.query:
+                    body = callback.PAGE.format('Giriş tamamlandı', "Bu sekmeyi kapatıp TaskFlow'a dönebilirsiniz.")
+                else:
+                    body = callback.PAGE.format('Giriş tamamlanamadı', html.escape(callback.error() or ''))
+                data = body.encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.HTTPServer(('127.0.0.1', port), Handler)
+        self.server.timeout = 0.5
+        self.url = 'http://127.0.0.1:{}{}'.format(self.server.server_port, CALLBACK_PATH)
+
+    def error(self):
+        query = self.query or {}
+        return (query.get('error_description') or query.get('error') or ['Bağlantı kod içermiyor.'])[0]
+
+    def wait(self, timeout):
+        """Return the authorization code, or raise when the link failed or never arrived."""
+        deadline = time.time() + timeout
+        try:
+            while self.query is None and time.time() < deadline:
+                self.server.handle_request()
+        finally:
+            self.server.server_close()
+        if self.query is None:
+            raise SupabaseAuthError(408, 'Giriş bağlantısı zamanında açılmadı.')
+        if 'code' not in self.query:
+            raise SupabaseAuthError(401, self.error())
+        return self.query['code'][0]
 
 
 class SupabaseClient:
@@ -64,11 +129,20 @@ class SupabaseClient:
 
     # Sign-in
 
-    def request_code(self, email):
-        self._request('/auth/v1/otp', {'email': email.strip(), 'create_user': True})
+    def send_link(self, email, redirect_to):
+        """Email a sign-in link that returns to redirect_to; keeps the PKCE verifier in memory."""
+        self._verifier = secrets.token_urlsafe(48)
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(self._verifier.encode('ascii')).digest()).rstrip(b'=')
+        self._request('/auth/v1/otp?redirect_to=' + urllib.parse.quote(redirect_to, safe=''),
+                      {'email': email.strip(), 'create_user': True,
+                       'code_challenge': challenge.decode('ascii'), 'code_challenge_method': 's256'})
 
-    def verify_code(self, email, code):
-        self._store(self._request('/auth/v1/verify', {'type': 'email', 'email': email.strip(), 'token': code.strip()}))
+    def finish_link(self, code):
+        verifier = getattr(self, '_verifier', None)
+        if not verifier:
+            raise SupabaseAuthError(401, 'Önce giriş bağlantısı isteyin.')
+        self._store(self._request('/auth/v1/token?grant_type=pkce', {'auth_code': code, 'code_verifier': verifier}))
+        self._verifier = None
 
     def refresh(self):
         if not self.session or not self.session.get('refresh_token'):
@@ -118,8 +192,10 @@ def _check(args):
     from task_sync import SyncEngine
 
     client = SupabaseClient(args.url, args.key)
-    client.request_code(args.email)
-    client.verify_code(args.email, input('E-postadaki 6 haneli kod: '))
+    callback = LinkCallback()
+    client.send_link(args.email, callback.url)
+    print('E-postanıza gelen giriş bağlantısını bu bilgisayarda açın (10 dakika bekleniyor)...', flush=True)
+    client.finish_link(callback.wait(600))
     project = 'TaskFlow senkron testi'
     with tempfile.TemporaryDirectory() as directory:
         a = TaskManager(Path(directory) / 'a' / 'data.sqlite3')
@@ -149,14 +225,14 @@ def _check(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='TaskFlow Supabase sync check')
     sub = parser.add_subparsers(dest='command', required=True)
-    check = sub.add_parser('check', help='Sign in by email code and run a disposable two-store round trip')
+    check = sub.add_parser('check', help='Sign in by email link and run a disposable two-store round trip')
     check.add_argument('--url', required=True, help='https://<project>.supabase.co')
     check.add_argument('--key', required=True, help='Publishable key (sb_publishable_...)')
     check.add_argument('--email', required=True)
     args = parser.parse_args(argv)
     try:
         _check(args)
-    except (SupabaseError, ValueError, AssertionError) as exc:
+    except (OSError, ValueError, AssertionError) as exc:
         print('Supabase senkron denemesi başarısız: {}'.format(exc), file=sys.stderr)
         return 1
     return 0
