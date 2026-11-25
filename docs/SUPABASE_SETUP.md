@@ -1,6 +1,6 @@
 # Supabase kurulumu
 
-Bu adımlar bulut senkronu için bir kez yapılır. Tasarım ayrıntıları için [CLOUD_SYNC.md](CLOUD_SYNC.md). Uygulamada henüz senkron ayarı yoktur; şimdilik kurulum bir deneme komutuyla doğrulanır.
+Bu adımlar bulut senkronu için bir kez yapılır. Tasarım ayrıntıları için [CLOUD_SYNC.md](CLOUD_SYNC.md). Proje bir kez kurulur; her bilgisayar aynı projeye 6. adımdaki gibi bağlanır.
 
 ## 1. Proje oluştur
 
@@ -57,6 +57,16 @@ Sorun olursa:
 | `Giriş bağlantısı zamanında açılmadı` | 10 dakika içinde açılmadı veya başka bilgisayarda açıldı |
 | `email rate limit exceeded` | Yerleşik e-posta servisi limiti; bir süre bekleyin |
 | `permission denied` | Şemanın son bölümü (yetkiler) çalışmamış |
+
+## 6. Bilgisayarları bağla
+
+Her bilgisayarda TaskFlow'u açın, üç nokta menüsünden (veya tepsi menüsünden) **Bulut senkronu**nu seçin:
+
+1. Proje adresini, publishable anahtarı ve e-postanızı girin. Bütün bilgisayarlarda aynı e-postayı kullanın.
+2. **Giriş bağlantısı gönder** düğmesine basın ve e-postadaki bağlantıyı aynı bilgisayarda açın.
+3. Pencere kapanır, ilk eşitleme başlar. Alt köşedeki bulut simgesi yeşile döner.
+
+İlk eşitlemeden önce yerel veriler `%APPDATA%\TaskFlow\data.sqlite3.pre-sync.bak` olarak yedeklenir. Aynı adlı projeler birleştirilir; hiçbir görevin üzerine yazılmaz. Agent bağlantısını her bilgisayarda kendi depo klasörüyle ayrıca kurun.
 
 ## Ücretsiz plan notları
 

@@ -1,6 +1,6 @@
 # Bulut senkronu (tasarım)
 
-Durum: 1–3. adımlar uygulandı. Senkron çekirdeği (`task_sync.py`), Supabase şeması (`supabase/taskflow_schema.sql`) ve istemcisi (`supabase_sync.py`) hazır; uygulama henüz buluta bağlanmıyor. Kurulum: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+Durum: 1–4. adımlar uygulandı. Senkron çekirdeği (`task_sync.py`), Supabase şeması (`supabase/taskflow_schema.sql`), istemcisi (`supabase_sync.py`) ve uygulama ile agent bağlantı aracındaki senkron servisi (`cloud_sync.py`) hazır. Kurulum: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
 
 Amaç: aynı kullanıcının birden fazla Windows bilgisayarında görevlerin, notların ve sonuç geçmişinin aynı görünmesi. Senkron isteğe bağlıdır; açılmadığı sürece TaskFlow bugünkü gibi tamamen yerel çalışır.
 
@@ -8,8 +8,8 @@ Amaç: aynı kullanıcının birden fazla Windows bilgisayarında görevlerin, n
 
 - **Sunucu:** Supabase ücretsiz planı (Postgres + Auth). 3 bilgisayarın kullanımı plan limitlerinin çok altındadır. Bir hafta hiç kullanılmayan ücretsiz proje duraklatılır; veri silinmez, panelden yeniden açılır.
 - **Yerel SQLite kalır.** Uygulama ve agent bağlantı aracı her zaman yerel veritabanını okur ve yazar. Senkron katmanı arka planda yerel değişiklikleri gönderir, uzaktakileri alır. İnternet yokken her şey çalışmaya devam eder.
-- **Ek ağır bağımlılık yok:** Supabase REST ve RPC uç noktaları standart HTTPS ile çağrılır. Uygulama açıkken birkaç saniyede bir değişiklik sorgulanır; anlık bildirim (Realtime) sonra eklenebilir.
-- **Giriş:** Supabase Auth'un standart e-posta bağlantısı, PKCE ile; şifre yoktur. Bağlantı aynı bilgisayarda açılır ve `127.0.0.1:47615` üzerindeki tek seferlik alıcıya döner; kod, girişi başlatan işlemdeki doğrulayıcı olmadan kullanılamaz. Oturum yenileme bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur. Supabase proje adresi ve herkese açık istemci anahtarı ilk kurulumda kullanıcı tarafından girilir. Hiçbir anahtar veya kullanıcı verisi bu depoya girmez.
+- **Ek ağır bağımlılık yok:** Supabase REST ve RPC uç noktaları standart HTTPS ile çağrılır. Uygulama açıkken yerel değişiklik (agent sonucu dahil) birkaç saniye içinde gönderilir, buluttaki değişiklikler 30 saniyede bir alınır; anlık bildirim (Realtime) sonra eklenebilir. Eşitleme arka plandaki ayrı bir işçide kendi veritabanı bağlantısıyla çalışır; pencere değişikliği mevcut yenileme mekanizmasıyla görür.
+- **Giriş:** Supabase Auth'un standart e-posta bağlantısı, PKCE ile; şifre yoktur. Bağlantı aynı bilgisayarda açılır ve `127.0.0.1:47615` üzerindeki tek seferlik alıcıya döner; kod, girişi başlatan işlemdeki doğrulayıcı olmadan kullanılamaz. Oturum yenileme bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur. Supabase proje adresi, herkese açık istemci anahtarı ve e-posta ilk kurulumda kullanıcı tarafından girilir ve bilgisayara özel ayarlar tablosunda kalır. Hiçbir anahtar veya kullanıcı verisi bu depoya girmez.
 - **Erişim:** her bulut tablosunda satır bazlı erişim kuralı (RLS) olur; satırlara yalnızca sahibi olan hesap erişir.
 
 ## Senkronlanan ve cihaza özel kalan veriler
@@ -33,7 +33,7 @@ Her görevin bir `revision` sayacı vardır ve bu sayaç bulutta bütün cihazla
 
 Silme ve arşivleme bulutta kalıcı silme değil işaret olarak tutulur; böylece silinen görev başka cihazdan geri gelmez. Silme ile eşzamanlı düzenleme çakışırsa silme kazanır; düzenleme geçmişe çakışma kaydı olarak yazılır.
 
-Agent sonucu, durum ve üstlenme alanları birlikte değerlendirilir; iki farklı üstlenme karışmaz. Yalnızca kaybedilen bir üstlenme çakışma kaydı oluşturmaz, kaybedilen sonuç oluşturur. Üstlenme ancak senkronla buluta ulaştığında diğer cihazlar için geçerlidir; 4. adımda bağlantı aracı senkron açıkken üstlenmeden önce eşitleme yapacak.
+Agent sonucu, durum ve üstlenme alanları birlikte değerlendirilir; iki farklı üstlenme karışmaz. Yalnızca kaybedilen bir üstlenme çakışma kaydı oluşturmaz, kaybedilen sonuç oluşturur. Üstlenme ancak senkronla buluta ulaştığında diğer cihazlar için geçerlidir. Bu yüzden senkron açıkken agent bağlantı aracı `list` ve `claim` öncesinde eşitler; `claim`, `report` ve `publish` sonrasında değişikliği hemen gönderir. Başka bilgisayarda üstlenilmiş görevin revizyonu değiştiği için üstlenme reddedilir. İnternet yoksa yerel iş durmaz; sonuçta `sync_warnings` uyarısı döner.
 
 ## Sunucu sözleşmesi
 
@@ -55,9 +55,16 @@ Projeler yerelde adla tutuluyordu. 1. adımdan sonra her projenin kalıcı bir k
 
 Bir bilgisayar buluta ilk katıldığında, buluta henüz gönderilmemiş aynı adlı yerel proje bulut kimliğini benimser. Geçmiş kayıtları ve OZI Brain dosyalarındaki işaretler yeni kimliğe taşınır. Ad çakışan farklı bulut projeleri yerelde `Ad (2)` biçiminde görünür. Bulutta yeniden adlandırılan proje diğer cihazlarda da yeniden adlandırılır; uygulamada henüz yeniden adlandırma menüsü yoktur.
 
+## Oturum ve eşzamanlılık
+
+- Oturum (yenileme anahtarı) Windows Kimlik Bilgisi Yöneticisi'nde `TaskFlow Supabase <proje>.supabase.co` adıyla tutulur; veritabanına veya dosyaya yazılmaz.
+- Aynı veritabanını uygulama ve agent bağlantı aracı aynı anda eşitlemez: `data.sqlite3.sync.lock` dosya kilidi tek eşitlemeye izin verir. Böylece Supabase'in döndürdüğü yeni yenileme anahtarı eski bir işlem tarafından tekrar kullanılmaz.
+- Yenileme anahtarı reddedilirse oturum silinir ve uygulama yeniden giriş ister (kırmızı bulut, tepsi bildirimi). Ağ hatasında oturum korunur, sonraki denemede devam edilir (sarı bulut).
+- **Senkronu kapat** oturumu siler; yerel veri ve eşitleme tabanı korunur.
+
 ## İlk katılım
 
-1. Yerel veritabanı `data.sqlite3.pre-sync.bak` olarak yedeklenir.
+1. Yerel veritabanı ilk eşitlemeden önce SQLite yedekleme API'siyle `data.sqlite3.pre-sync.bak` olarak yedeklenir. Var olan yedeğin üzerine hiçbir zaman yazılmaz.
 2. Bulutta hiç veri yoksa yerel veri yüklenir.
 3. Bulutta veri varsa projeler adla eşleştirilir. Görevler kimlikleriyle birleştirilir ve hiçbir görevin üzerine yazılmaz.
 
@@ -66,5 +73,5 @@ Bir bilgisayar buluta ilk katıldığında, buluta henüz gönderilmemiş aynı 
 1. **Kalıcı proje kimlikleri:** uygulandı.
 2. **Senkron çekirdeği:** uygulandı. Taban sürümler, değişiklik tespiti ve üç yönlü birleştirme iki ayrı geçici veritabanı ve sahte sunucuyla test edildi.
 3. **Supabase şeması ve istemcisi:** uygulandı ve gerçek bir projede (Frankfurt, ücretsiz plan) `python supabase_sync.py check` ile doğrulandı: e-posta bağlantısıyla giriş, gönderme, alma, iki cihaz birleştirmesi ve silme.
-4. **Arayüz:** senkron ayarı, giriş, oturumun Windows Kimlik Bilgisi Yöneticisi'nde saklanması, ilk katılım yedeği, arka planda eşitleme, durum göstergesi; bağlantı aracında üstlenmeden önce eşitleme.
+4. **Arayüz:** uygulandı. Üç nokta ve tepsi menüsünde **Bulut senkronu** penceresi, e-posta bağlantısıyla giriş, oturumun Windows Kimlik Bilgisi Yöneticisi'nde saklanması, ilk katılım yedeği, arka planda eşitleme, alt köşede durum simgesi (senkron açıkken dekoratif yıldızın yerini alır, böylece onaylı ölçüler değişmez); bağlantı aracında üstlenmeden önce ve sonra eşitleme.
 5. **Gerçek kurulum:** önce bu bilgisayarda iki geçici veritabanıyla, sonra diğer bilgisayarlarda gerçek verilerle ilk katılım.

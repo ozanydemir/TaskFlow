@@ -44,6 +44,7 @@ class LinkCallback:
 
     def __init__(self, port=CALLBACK_PORT):
         self.query = None
+        self.cancelled = False
         callback = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
@@ -75,14 +76,20 @@ class LinkCallback:
         query = self.query or {}
         return (query.get('error_description') or query.get('error') or ['Bağlantı kod içermiyor.'])[0]
 
+    def cancel(self):
+        """Stop waiting within about half a second; safe to call from another thread."""
+        self.cancelled = True
+
     def wait(self, timeout):
         """Return the authorization code, or raise when the link failed or never arrived."""
         deadline = time.time() + timeout
         try:
-            while self.query is None and time.time() < deadline:
+            while self.query is None and not self.cancelled and time.time() < deadline:
                 self.server.handle_request()
         finally:
             self.server.server_close()
+        if self.query is None and self.cancelled:
+            raise SupabaseAuthError(499, 'Giriş iptal edildi.')
         if self.query is None:
             raise SupabaseAuthError(408, 'Giriş bağlantısı zamanında açılmadı.')
         if 'code' not in self.query:
@@ -147,8 +154,15 @@ class SupabaseClient:
     def refresh(self):
         if not self.session or not self.session.get('refresh_token'):
             raise SupabaseAuthError(401, 'Oturum yok; yeniden giriş yapın.')
-        self._store(self._request('/auth/v1/token?grant_type=refresh_token',
-                                  {'refresh_token': self.session['refresh_token']}))
+        try:
+            response = self._request('/auth/v1/token?grant_type=refresh_token',
+                                     {'refresh_token': self.session['refresh_token']})
+        except SupabaseError as exc:
+            if exc.status == 400:
+                # Revoked, reused or expired refresh token: only a new sign-in helps.
+                raise SupabaseAuthError(400, str(exc).split(': ', 1)[-1]) from None
+            raise
+        self._store(response)
 
     def _store(self, response):
         if not response or not response.get('access_token') or not response.get('refresh_token'):

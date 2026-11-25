@@ -1,4 +1,9 @@
-"""Local, project-scoped agent bridge. It never runs code, agents, or network requests."""
+"""Local, project-scoped agent bridge. It never runs code or agents.
+
+Its only network use is the user's own optional cloud sync: when it is on for this store,
+list and claim sync first (so a task claimed on another computer is seen) and
+claim/report/publish sync afterwards. A failed sync never blocks local work; it is returned as a warning.
+"""
 import argparse
 import json
 import os
@@ -40,10 +45,24 @@ def command_parser():
     return parser
 
 
+def cloud_sync(manager, warnings):
+    """Sync this store when the user turned cloud sync on; report problems as warnings."""
+    from cloud_sync import sync_if_enabled
+    status = sync_if_enabled(manager.db_file)
+    if status and status['state'] != 'ok':
+        warnings.append('Bulut senkronu: ' + status['message'])
+    if status:
+        manager.load()
+    return status
+
+
 def run(args):
     if args.db and not Path(args.db).is_file():
         raise ValueError('Belirtilen görev veritabanı bulunamadı.')
     manager = TaskManager(args.db)
+    cloud_warnings = []
+    if args.command in ('list', 'claim'):
+        cloud_sync(manager, cloud_warnings)
     if args.command == 'projects':
         return {'projects': [{'name': p, 'id': manager.project_ids.get(p), 'binding': manager.bindings.get(p)} for p in manager.projects]}
     if args.project not in manager.projects:
@@ -74,7 +93,10 @@ def run(args):
             result = {'events': manager.get_history(args.project)}
         else:
             result = {'path': manager.export_project(args.project)}
-    return {'result': result, 'sync_warnings': manager.sync_errors}
+    warnings = list(manager.sync_errors)
+    if args.command in ('claim', 'report', 'publish'):
+        cloud_sync(manager, cloud_warnings)
+    return {'result': result, 'sync_warnings': warnings + cloud_warnings}
 
 
 def main(argv=None):

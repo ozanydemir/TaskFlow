@@ -1,6 +1,6 @@
 # Agent ile çalışma
 
-TaskFlow bir görev defteridir. Görev eklemek, agent başlatmaz ve kod çalıştırmaz. Codex, Claude Code veya başka bir yerel agent yalnızca siz seçili projenin görevlerini yapmasını istediğinizde çalışır. Bu bağlantı API anahtarı, hesap, ağ servisi veya ücretli API gerektirmez.
+TaskFlow bir görev defteridir. Görev eklemek, agent başlatmaz ve kod çalıştırmaz. Codex, Claude Code veya başka bir yerel agent yalnızca siz seçili projenin görevlerini yapmasını istediğinizde çalışır. Bu bağlantı API anahtarı, hesap, ağ servisi veya ücretli API gerektirmez. İsteğe bağlı bulut senkronu açıksa bağlantı aracı `list` ve `claim` öncesinde, `claim`, `report` ve `publish` sonrasında kendi Supabase projenizle eşitler; böylece başka bilgisayarda üstlenilmiş görev tekrar üstlenilmez. İnternet yoksa yerel iş sürer ve `sync_warnings` uyarısı döner ([CLOUD_SYNC.md](CLOUD_SYNC.md)).
 
 ## Bir kez bağlantı kur
 

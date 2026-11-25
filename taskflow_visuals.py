@@ -49,6 +49,13 @@ def make_icon(name, color='#acc0e6', size=24):
         p.setBrush(QColor(color))
         for n in (5, 12, 19):
             p.drawEllipse(QPointF(n, 12) if name == 'more' else QPointF(12, n), 1.7, 1.7)
+    elif name == 'cloud':
+        path = QPainterPath(QPointF(7, 18))
+        path.arcTo(QRectF(2, 10, 8, 8), 270, -180)
+        path.arcTo(QRectF(6, 5, 11, 11), 160, -150)
+        path.arcTo(QRectF(14, 10, 8, 8), 90, -180)
+        path.closeSubpath()
+        p.drawPath(path)
     elif name == 'grid':
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(color))

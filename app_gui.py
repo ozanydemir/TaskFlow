@@ -1,7 +1,9 @@
+import json
 import os
 import sys
 import sqlite3
-from PyQt5.QtCore import Qt, QSize, QRectF, QRect, QEvent, pyqtSignal, QPoint, QTimer
+import threading
+from PyQt5.QtCore import Qt, QObject, QSize, QRectF, QRect, QEvent, pyqtSignal, QPoint, QTimer
 from PyQt5.QtGui import QIcon, QFont, QColor, QPainter, QPen, QCursor, QPixmap, QFontMetrics
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -11,6 +13,8 @@ from PyQt5.QtWidgets import (
 )
 
 import autostart
+import cloud_sync
+from supabase_sync import LinkCallback, SupabaseClient
 from task_manager import TaskManager
 from taskflow_agent import agent_prompt
 from taskflow_visuals import make_icon, CONTROL_STYLE, MENU_STYLE
@@ -168,17 +172,20 @@ class ModernDialog(QDialog):
 
 
 class ProjectConnectionDialog(ModernDialog):
+    FIELD_STYLE = """
+        QLineEdit, QTextEdit { background: #0e1422; color: #f2f5fc; border: 1px solid #304461;
+            border-radius: 8px; padding: 8px; font-size: 12px; selection-background-color: #2563eb; }
+        QLineEdit:focus { border-color: #3b82f6; }
+        QPushButton { background: #101726; color: #d4e2ff; border: 1px solid #304461;
+            border-radius: 8px; padding: 6px 12px; font-size: 12px; }
+        QPushButton:hover, QPushButton:focus { border-color: #3b82f6; }
+        QPushButton:disabled { color: #6b7c99; }
+    """
+
     def __init__(self, project, binding, parent=None):
         super().__init__('Agent bağlantısı · ' + project, parent)
         self.resize(420, 360)
-        self.setStyleSheet("""
-            QLineEdit, QTextEdit { background: #0e1422; color: #f2f5fc; border: 1px solid #304461;
-                border-radius: 8px; padding: 8px; font-size: 12px; selection-background-color: #2563eb; }
-            QLineEdit:focus { border-color: #3b82f6; }
-            QPushButton { background: #101726; color: #d4e2ff; border: 1px solid #304461;
-                border-radius: 8px; padding: 6px 12px; font-size: 12px; }
-            QPushButton:hover, QPushButton:focus { border-color: #3b82f6; }
-        """)
+        self.setStyleSheet(self.FIELD_STYLE)
         info = QLabel('Görevleri biriktir; agentı istediğin zaman başlat.\nBu bağlantı kendiliğinden agent çalıştırmaz.')
         info.setStyleSheet('color: #96add4; font-size: 12px; border: none;')
         info.setWordWrap(True)
@@ -226,6 +233,122 @@ class ProjectConnectionDialog(ModernDialog):
             self.error_label.setText(str(exc))
             return
         super().accept()
+
+
+class _Relay(QObject):
+    """Carries results from worker threads to the GUI thread."""
+    message = pyqtSignal(str, str)
+    status = pyqtSignal(dict)
+
+
+class CloudSyncDialog(ModernDialog):
+    """Supabase address, sign-in by email link, and switching sync on or off on this computer."""
+
+    def __init__(self, window):
+        super().__init__('Bulut senkronu', window)
+        self.window = window
+        self.callback = None
+        self.resize(420, 420)
+        self.setStyleSheet(ProjectConnectionDialog.FIELD_STYLE)
+        config = cloud_sync.get_config(window.task_manager) or {}
+        info = QLabel('Görevler ve notlar aynı hesapla giriş yapılan bilgisayarlarda aynı görünür. '
+                      'Agent bağlantıları ve pencere ayarları bu bilgisayarda kalır.')
+        info.setStyleSheet('color: #96add4; font-size: 12px; border: none;')
+        info.setWordWrap(True)
+        self.card_layout.addWidget(info)
+        self.url_field = self._field('Supabase proje adresi', config.get('url', ''), 'https://<proje>.supabase.co')
+        self.key_field = self._field('Publishable anahtar', config.get('key', ''), 'sb_publishable_...')
+        self.email_field = self._field('E-posta', config.get('email', ''), 'ad@ornek.com')
+        self.state_label = QLabel()
+        self.state_label.setWordWrap(True)
+        self.state_label.setStyleSheet('color: #fbbf24; border: none; font-size: 12px;')
+        self.card_layout.addWidget(self.state_label)
+        buttons = QHBoxLayout()
+        self.off_btn = QPushButton('Senkronu kapat')
+        self.off_btn.clicked.connect(self._turn_off)
+        self.close_btn = QPushButton('Kapat')
+        self.close_btn.clicked.connect(self.reject)
+        self.sign_btn = QPushButton('Giriş bağlantısı gönder')
+        self.sign_btn.setStyleSheet('background: #2563eb; color: white;')
+        self.sign_btn.clicked.connect(self._send_link)
+        buttons.addWidget(self.off_btn)
+        buttons.addStretch()
+        buttons.addWidget(self.close_btn)
+        buttons.addWidget(self.sign_btn)
+        self.card_layout.addLayout(buttons)
+        self.relay = _Relay(self)
+        self.relay.message.connect(self._on_message)
+        enabled = bool(config.get('enabled')) and window.cloud.signed_in(config)
+        self.off_btn.setVisible(bool(config.get('enabled')))
+        if enabled:
+            self.state_label.setStyleSheet('color: #6ee7b7; border: none; font-size: 12px;')
+            self.state_label.setText('Bağlı: {}. {}'.format(config.get('email', ''), window.cloud_status.get('message', '')))
+            self.sign_btn.setText('Yeniden giriş yap')
+
+    def _field(self, label, value, placeholder):
+        title = QLabel(label)
+        title.setStyleSheet('color: #d4e2ff; border: none; font-size: 12px;')
+        self.card_layout.addWidget(title)
+        field = QLineEdit(value)
+        field.setPlaceholderText(placeholder)
+        field.setAccessibleName(label)
+        self.card_layout.addWidget(field)
+        return field
+
+    def _config(self):
+        config = {'url': self.url_field.text().strip().rstrip('/'), 'key': self.key_field.text().strip(),
+                  'email': self.email_field.text().strip(), 'enabled': True}
+        SupabaseClient(config['url'], config['key'])
+        if '@' not in config['email']:
+            raise ValueError('Geçerli bir e-posta adresi girin.')
+        return config
+
+    def _send_link(self):
+        try:
+            config = self._config()
+            self.callback = LinkCallback()
+        except (ValueError, OSError) as exc:
+            self._on_message('error', str(exc))
+            return
+        self.sign_btn.setEnabled(False)
+        self._on_message('wait', 'Bağlantı gönderiliyor...')
+        callback, cloud, relay = self.callback, self.window.cloud, self.relay
+
+        def work():
+            try:
+                cloud.sign_in(config, callback, on_sent=lambda: relay.message.emit(
+                    'wait', 'E-postana gelen bağlantıyı bu bilgisayarda aç. 10 dakika bekleniyor...'))
+                relay.message.emit('done', json.dumps(config))
+            except (OSError, ValueError) as exc:
+                relay.message.emit('error', str(exc))
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_message(self, kind, text):
+        colors = {'error': '#fca5a5', 'wait': '#93c5fd', 'done': '#6ee7b7'}
+        self.state_label.setStyleSheet('color: {}; border: none; font-size: 12px;'.format(colors[kind]))
+        if kind == 'done':
+            self.window.set_cloud_config(json.loads(text))
+            super().accept()
+            return
+        self.state_label.setText(text)
+        if kind == 'error':
+            self.sign_btn.setEnabled(True)
+
+    def _turn_off(self):
+        config = cloud_sync.get_config(self.window.task_manager)
+        if config:
+            self.window.set_cloud_config(dict(config, enabled=False))
+            try:
+                self.window.cloud.sign_out(config)
+            except OSError as exc:
+                self._on_message('error', str(exc))
+                return
+        super().accept()
+
+    def done(self, result):
+        if self.callback:
+            self.callback.cancel()
+        super().done(result)
 
 
 class CustomInputDialog(ModernDialog):
@@ -707,9 +830,17 @@ class TaskArchiveDialog(ModernDialog):
 
 # --- Main Application Window ---
 class TaskFlowApp(QMainWindow):
-    def __init__(self, start_minimized=False, task_manager=None, setup_autostart=True):
+    CLOUD_INTERVAL_MS = 30000
+    CLOUD_COLORS = {'off': '#71829e', 'syncing': '#60a5fa', 'ok': '#34d399', 'offline': '#fbbf24',
+                    'signed_out': '#f87171'}
+
+    def __init__(self, start_minimized=False, task_manager=None, setup_autostart=True, cloud=None):
         super().__init__()
         self.task_manager = task_manager if task_manager is not None else TaskManager()
+        self.cloud = cloud or cloud_sync.CloudSync(self.task_manager.db_file)
+        self.cloud_status = {'state': 'off', 'message': 'Bulut senkronu kapalı.'}
+        self._cloud_running = False
+        self._cloud_synced_change = None
         self.current_project = self.task_manager.settings.get('selected_project', 'Tümü')
         self.start_minimized = start_minimized
 
@@ -734,6 +865,12 @@ class TaskFlowApp(QMainWindow):
         self.sync_timer.timeout.connect(self._poll_external_changes)
         self.sync_timer.start()
         self._last_sync_warning = None
+        self.cloud_relay = _Relay(self)
+        self.cloud_relay.status.connect(self._on_cloud_status)
+        self.cloud_timer = QTimer(self)
+        self.cloud_timer.setInterval(self.CLOUD_INTERVAL_MS)
+        self.cloud_timer.timeout.connect(self.start_cloud_sync)
+        self._apply_cloud_config()
         # Receive pointer events before child widgets so the invisible resize
         # catchment also works when the pointer is over a child at the edge.
         QApplication.instance().installEventFilter(self)
@@ -807,6 +944,9 @@ class TaskFlowApp(QMainWindow):
         show_action = QAction("Aç / Gizle", self)
         show_action.triggered.connect(self.toggle_window_visibility)
         tray_menu.addAction(show_action)
+        cloud_action = QAction("Bulut senkronu", self)
+        cloud_action.triggered.connect(self.show_cloud_dialog)
+        tray_menu.addAction(cloud_action)
 
         tray_menu.addSeparator()
 
@@ -1021,9 +1161,20 @@ class TaskFlowApp(QMainWindow):
         self.footer_motto = QLabel('Küçük adımlar, büyük sonuçlar.')
         self.footer_motto.setStyleSheet('color: #9fb7df; font-family: "Segoe Print"; font-size: 11px; font-style: italic;')
         footer.addWidget(self.footer_motto)
-        sparkle = QLabel()
-        sparkle.setPixmap(make_icon('sparkle', size=24).pixmap(24, 24))
-        footer.addWidget(sparkle)
+        self.sparkle_lbl = QLabel()
+        self.sparkle_lbl.setPixmap(make_icon('sparkle', size=24).pixmap(24, 24))
+        footer.addWidget(self.sparkle_lbl)
+        # While cloud sync is on, its status takes the decorative sparkle's slot, so the
+        # approved footer keeps its width.
+        self.cloud_btn = QPushButton()
+        self.cloud_btn.setFixedSize(24, 24)
+        self.cloud_btn.setIconSize(QSize(20, 20))
+        self.cloud_btn.setCursor(Qt.PointingHandCursor)
+        self.cloud_btn.setStyleSheet('QPushButton { background: transparent; border: none; border-radius: 6px; } '
+                                     'QPushButton:hover, QPushButton:focus { background: #202e46; }')
+        self.cloud_btn.clicked.connect(self.show_cloud_dialog)
+        self.cloud_btn.hide()
+        footer.addWidget(self.cloud_btn)
         self.size_grip = QSizeGrip(self)
         self.size_grip.setFixedSize(14, 14)
         self.size_grip.setStyleSheet('background: transparent;')
@@ -1048,6 +1199,8 @@ class TaskFlowApp(QMainWindow):
         menu.addSeparator()
         archive = menu.addAction('Arşivlenen görevler')
         archive.triggered.connect(self._show_archive)
+        cloud = menu.addAction('Bulut senkronu')
+        cloud.triggered.connect(self.show_cloud_dialog)
         menu.exec_(self.projects_menu_btn.mapToGlobal(self.projects_menu_btn.rect().bottomLeft()))
 
     def resizeEvent(self, event):
@@ -1314,10 +1467,72 @@ class TaskFlowApp(QMainWindow):
                 self._refresh_tasks()
                 self.task_list_widget.verticalScrollBar().setValue(scroll)
             self._notify_sync_warnings()
+            if self.cloud_timer.isActive() and self.task_manager._change != self._cloud_synced_change:
+                # A local edit, or a result written by the agent bridge: push it soon.
+                self.start_cloud_sync()
         except (OSError, ValueError, sqlite3.Error) as exc:
             if str(exc) != self._last_sync_warning:
                 self.tray_icon.showMessage('TaskFlow', 'Görevler yenilenemedi: ' + str(exc), QSystemTrayIcon.Warning, 5000)
                 self._last_sync_warning = str(exc)
+
+    # Cloud sync
+
+    def _apply_cloud_config(self):
+        config = cloud_sync.get_config(self.task_manager)
+        if config and config.get('enabled'):
+            self.cloud_timer.start()
+            self._set_cloud_status({'state': 'syncing', 'message': 'Eşitleniyor...'})
+            QTimer.singleShot(500, self.start_cloud_sync)
+        else:
+            self.cloud_timer.stop()
+            self._set_cloud_status({'state': 'off', 'message': 'Bulut senkronu kapalı.'})
+
+    def set_cloud_config(self, config):
+        self.task_manager.settings[cloud_sync.SETTING] = config
+        self.task_manager.save()
+        self._cloud_synced_change = None
+        self._apply_cloud_config()
+
+    def start_cloud_sync(self):
+        if self._cloud_running or not self.cloud_timer.isActive():
+            return
+        self._cloud_running = True
+        cloud, db_file, relay = self.cloud, self.task_manager.db_file, self.cloud_relay
+
+        def work():
+            try:
+                status = cloud.run()
+                status['change'] = cloud_sync.change_counter(db_file)
+            except Exception as exc:  # Never let a worker failure stop future syncs.
+                status = {'state': 'offline', 'message': 'Eşitlenemedi: {}'.format(exc)}
+            relay.status.emit(status)
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_cloud_status(self, status):
+        self._cloud_running = False
+        if 'change' in status:
+            self._cloud_synced_change = status['change']
+        if status['state'] == 'signed_out' and self.cloud_status.get('state') != 'signed_out':
+            self.tray_icon.showMessage('TaskFlow', status['message'], QSystemTrayIcon.Warning, 6000)
+        if status['state'] == 'off':
+            self.cloud_timer.stop()
+        self._set_cloud_status(status)
+        self._poll_external_changes()
+
+    def _set_cloud_status(self, status):
+        self.cloud_status = status
+        color = self.CLOUD_COLORS.get(status['state'], '#71829e')
+        self.cloud_btn.setIcon(make_icon('cloud', color, 20))
+        tooltip = 'Bulut senkronu · ' + status['message']
+        self.cloud_btn.setToolTip(tooltip)
+        self.cloud_btn.setAccessibleName(tooltip)
+        self.cloud_btn.setVisible(status['state'] != 'off')
+        self.sparkle_lbl.setVisible(status['state'] == 'off')
+
+    def show_cloud_dialog(self):
+        if self.isHidden():
+            self.show()
+        CloudSyncDialog(self).exec_()
 
     def _notify_sync_warnings(self):
         message = '\n'.join(self.task_manager.sync_errors)

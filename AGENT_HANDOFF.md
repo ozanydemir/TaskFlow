@@ -354,3 +354,44 @@ with QT_QPA_PLATFORM=offscreen (9 client tests incl. PKCE and the callback).
 No build or installation.
 Next: step 4 (GUI sync settings, sign-in, Credential Manager session,
 pre-sync backup, background sync, status, sync before bridge claims).
+
+## 2026-11-24: cloud sync in the app and the bridge (step 4)
+
+- cloud_sync.py: CloudSync runs one sync of a store and returns a status
+  (off, signed_out, offline, ok) instead of raising. Config (url, publishable
+  key, email, enabled) lives in the device-only settings table under
+  `cloud_sync`. The session goes to Windows Credential Manager (ctypes
+  CredWriteW/CredReadW, target `TaskFlow Supabase <host>`), never to the DB.
+  A file lock (`data.sqlite3.sync.lock`) allows one sync per store across the
+  app and the bridge, so a rotated refresh token is never reused. The first
+  sync writes `data.sqlite3.pre-sync.bak` with the SQLite backup API and
+  never replaces an existing backup. A rejected refresh token (400/401) clears
+  the session; network errors keep it.
+- supabase_sync.py: refresh failures with 400 are SupabaseAuthError;
+  LinkCallback.cancel() stops a pending sign-in.
+- app_gui.py: CloudSyncDialog (address, key, email, sign-in link, turn off),
+  opened from the "..." menu and the tray menu. A background thread syncs
+  30 s periodically and right after any change of the store's change counter
+  (GUI edits and bridge results); the window picks results up through
+  reload_if_changed. The status cloud replaces the decorative footer sparkle
+  only while sync is on, because an extra footer button truncated
+  "Tamamlananları Arşivle" at the default 440 px width.
+- taskflow_agent.py: when sync is on for the store, list/claim sync first and
+  claim/report/publish sync afterwards; failures become sync_warnings and
+  never block local work. The bridge's no-network note now names this one
+  exception.
+- Docs: README, CLOUD_SYNC, SUPABASE_SETUP (joining a computer), AGENT_BRIDGE.
+
+Verification: 86 tests passed with QT_QPA_PLATFORM=offscreen, including 9 new
+test_cloud_sync tests (fake Supabase, two stores, bridge claim lost to another
+computer, offline bridge warning, backup once, revoked vs offline session,
+store lock, window status and push after a GUI edit, a real Credential Manager
+round trip under a unique test target that is deleted). Offscreen renders
+checked the footer at 440 and 340 px and the dialog. test_cloud_sync added to
+README and CI.
+
+Not verified: the GUI sign-in against the real project (only the CLI check
+was run against it), and no build, bridge build, installer or installation.
+Next: build and install on this PC, sign in from the app, then join the other
+two computers.
+

@@ -1,6 +1,6 @@
 # TaskFlow
 
-TaskFlow, Windows için yerel ve proje bazlı bir görev takip uygulamasıdır. Veriler bilgisayarınızda tutulur; uygulama herhangi bir API anahtarı veya çevrim içi hesap gerektirmez.
+TaskFlow, Windows için yerel ve proje bazlı bir görev takip uygulamasıdır. Veriler bilgisayarınızda tutulur; uygulama herhangi bir API anahtarı veya çevrim içi hesap gerektirmez. İsteğe bağlı bulut senkronu açılırsa görevler ve notlar kendi Supabase projeniz üzerinden diğer bilgisayarlarınızla eşitlenir.
 
 ![TaskFlow demo ekranı](design_mockups/taskflow_reference_desktop.png)
 
@@ -37,6 +37,12 @@ Yeni kurulum mevcut SQLite kayıtlarını ve ayarları korur. Önceden eski sür
 
 Görev eklemek agent çalıştırmaz. Ek bir API veya ücretli servis gerekmez. [Kurulum ve çalışma ayrıntıları](docs/AGENT_BRIDGE.md).
 
+## Bulut senkronu (isteğe bağlı)
+
+Birden fazla bilgisayar kullanıyorsanız üç nokta menüsünden veya tepsi menüsünden **Bulut senkronu** açılır. Supabase proje adresi, publishable anahtar ve e-posta girilir; e-postaya gelen bağlantı aynı bilgisayarda açılınca giriş tamamlanır. Şifre yoktur ve oturum bilgisi Windows Kimlik Bilgisi Yöneticisi'nde tutulur.
+
+Senkron açıkken TaskFlow yerel veritabanıyla çalışmaya devam eder, değişiklikleri birkaç saniye içinde gönderir ve 30 saniyede bir yenilerini alır. Alt köşedeki bulut simgesi durumu gösterir: yeşil eşitlendi, sarı bağlantı yok, kırmızı yeniden giriş gerekiyor. İlk eşitlemeden önce yerel veritabanı `data.sqlite3.pre-sync.bak` olarak yedeklenir. Agent bağlantıları ve pencere ayarları bilgisayara özel kalır. Kurulum: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md), tasarım: [docs/CLOUD_SYNC.md](docs/CLOUD_SYNC.md).
+
 ## Kaynaktan çalıştırma
 
 ```powershell
@@ -59,7 +65,7 @@ Bu komutlar `dist_agent\TaskFlowAgent.exe`, `dist\TaskFlow.exe` ve iki aracı i�
 
 ```powershell
 $env:QT_QPA_PLATFORM = 'offscreen'
-python -m unittest test_app test_agent_bridge test_taskflow_skill test_task_history test_task_sync test_supabase_sync -v
+python -m unittest test_app test_agent_bridge test_taskflow_skill test_task_history test_task_sync test_supabase_sync test_cloud_sync -v
 python preview_design.py
 ```
 
