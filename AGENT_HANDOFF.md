@@ -395,3 +395,51 @@ was run against it), and no build, bridge build, installer or installation.
 Next: build and install on this PC, sign in from the app, then join the other
 two computers.
 
+## 2026-11-26: cloud version installed on a PC with existing data
+
+This workstation had the 2026-10-24 build (task menu fix, no cloud code) and a
+real store with existing projects and tasks. The checkout was fast-forwarded to
+a1a4f90.
+
+Data safety:
+- Before any build or install, the real roaming TaskFlow folder was copied
+  outside AppData (the Claude desktop package context redirects AppData, so the
+  copy ran through Explorer). The copy passed integrity_check: 7 projects,
+  122 tasks, 230 journal events, no bindings.
+- Dry run on a copy of that backup with the new code: additive migration, sync
+  to MemoryServer, then an empty second store joined. Both stores held the same
+  7 projects, 122 tasks and 230 events with equal task content, and a repeat
+  sync was quiet.
+
+Build: all 86 tests passed with QT_QPA_PLATFORM=offscreen. Frozen --verify-build
+passed with disposable data. Installer payloads match the built binaries, and
+both executables package cloud_sync, supabase_sync and task_sync. The frozen
+agent read a copy of the backup.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist/TaskFlow.exe | 40231117 | 216c81df4e36fc59f24f1f4c73994f0a538189c732507d06a9777ace618680bf |
+| dist_agent/TaskFlowAgent.exe | 9134460 | 3a64c730138c64647c2464db0165ba92acc674d1f95becbe94989f1a148951b2 |
+| dist_installer/TaskFlowSetup.exe | 60416743 | c49ebfa0844ed9c83ada130f7f146157ad0169f91e50d89e03be929391ee8336 |
+
+Installation and first join (real profile):
+- The setup ran through Explorer with the app closed; installed files match the
+  digests above. After first launch the migrated store had project_ids for all
+  7 projects, the same task content fingerprint as the backup and 230 events.
+- The user entered the Supabase settings and signed in from the GUI with the
+  emailed link. This is the first GUI sign-in against the real project. The
+  session is stored under a `TaskFlow Supabase <host>` Credential Manager
+  target; `data.sqlite3.pre-sync.bak` was written and matches the backup content.
+- After the first sync (read from a copy of the live store, no bulk use of the
+  session): 123 tasks and 7 projects, all with a server-confirmed sync_base, no
+  local differences from it, and 231 of 231 events known to the server. None of
+  the 122 original tasks was removed or changed and no project id changed. One
+  pending task without a project, created at 17:18 by another computer, arrived
+  from the cloud, as did two tombstones from the earlier check command.
+- Not verified: the cloud rows were not queried directly; the evidence is the
+  local server-confirmed state. The status icon color was not checked visually.
+  No project bindings exist on this PC yet.
+
+Next: join the remaining computer, then bind projects on each PC as needed.
+Not published: no tag or GitHub Release was created.
+
