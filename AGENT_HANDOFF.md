@@ -500,3 +500,27 @@ An Impeccable dual-agent UX critique of the shipped `440x640` interface surfaced
 | dist_installer/TaskFlowSetup.exe | 62129884 | bb9861897bc64af399c64b7a7b86c8f35efe9bc84af613889e508cf83cbff395 |
 
 Not published: no tag or GitHub Release was created.
+
+## 2026-11-27: update of the cloud-joined PC with existing data to 8ccc757
+
+The workstation from the 2026-11-26 first join was fast-forwarded to 8ccc757.
+Before building, the real roaming TaskFlow folder was copied outside AppData
+through Explorer: integrity ok, 8 projects, 133 tasks, 256 events, cloud sync
+on, every record server-confirmed and no pending local change.
+
+Verification: all 90 tests passed with QT_QPA_PLATFORM=offscreen; frozen
+--verify-build passed; installer payloads match the built binaries and both
+executables package the sync modules. The setup ran through Explorer with the
+app closed; installed files match the digests below and the app restarted and
+responds. A copy of the live store afterwards passed integrity_check and had
+the same 8 projects, 133 tasks and task content as the backup, no removed or
+changed task, unchanged project ids, and all records still server-confirmed.
+Not checked: the new UX changes on this PC by hand, and the status icon color.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist/TaskFlow.exe | 41948087 | 918fcbc97bf5381a57012439d601463c3b39c667639b4cec734edc52329960a6 |
+| dist_agent/TaskFlowAgent.exe | 9136137 | 21fcaffb209613e062d7dc2dbc0c3ac9fbbaeffc68c24253c4409136d968df16 |
+| dist_installer/TaskFlowSetup.exe | 62129475 | cc952b5d67555fcee3cbf0e56b2cec546aee34fc25954d37c328ee501a754779 |
+
+Not published: no tag or GitHub Release was created.
