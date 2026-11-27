@@ -3,9 +3,41 @@ import sys
 import argparse
 import ctypes
 from PyQt5.QtCore import Qt
+from PyQt5.QtNetwork import QLocalServer, QLocalSocket
 from PyQt5.QtWidgets import QApplication
 
 from app_gui import TaskFlowApp
+
+IPC_SERVER_NAME = "TaskFlow_SingleInstance_IPC_v1"
+
+
+def _notify_running_instance(server_name=IPC_SERVER_NAME):
+    sock = QLocalSocket()
+    sock.connectToServer(server_name)
+    if sock.waitForConnected(400):
+        sock.write(b'SHOW\n')
+        sock.flush()
+        sock.waitForBytesWritten(400)
+        sock.disconnectFromServer()
+        return True
+    return False
+
+
+def _start_instance_server(window, server_name=IPC_SERVER_NAME):
+    QLocalServer.removeServer(server_name)
+    server = QLocalServer(window)
+    def on_connection():
+        while server.hasPendingConnections():
+            client = server.nextPendingConnection()
+            if client:
+                client.waitForReadyRead(100)
+                client.close()
+                client.deleteLater()
+            window.bring_to_front()
+    server.newConnection.connect(on_connection)
+    if not server.listen(server_name):
+        return None
+    return server
 
 def _log_debug(msg):
     try:
@@ -90,7 +122,7 @@ def main():
         if hasattr(Qt, 'AA_UseHighDpiPixmaps'):
             QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
-        # Windows Single Instance check using Mutex
+        # Windows Single Instance check using Mutex + raise running instance
         mutex = None
         try:
             import win32event
@@ -98,7 +130,8 @@ def main():
             import winerror
             mutex = win32event.CreateMutex(None, False, "FlowList_SingleInstance_Mutex_82736")
             if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
-                _log_debug("Another instance already running. Exiting.")
+                _notify_running_instance()
+                _log_debug("Another instance already running; signaled to show and exiting.")
                 sys.exit(0)
         except Exception as e:
             _log_debug(f"Mutex warning: {e}")
@@ -108,8 +141,11 @@ def main():
         app.setQuitOnLastWindowClosed(False)
 
         window = TaskFlowApp(start_minimized=args.minimized)
+        instance_server = _start_instance_server(window)
         _log_debug("Window initialized and entering event loop.")
         exit_code = app.exec_()
+        if instance_server:
+            instance_server.close()
         _log_debug(f"App exited with code: {exit_code}")
 
         if mutex:

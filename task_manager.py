@@ -173,8 +173,8 @@ class TaskManager:
             uid = self.project_ids.get(project)
             if uid:
                 rows = conn.execute('SELECT payload FROM task_events WHERE project_id=? ORDER BY rowid', (uid,))
-            else:
-                rows = conn.execute('SELECT payload FROM task_events WHERE project_id IS NULL ORDER BY rowid')
+                return [json.loads(payload) for payload, in rows]
+            rows = conn.execute('SELECT payload FROM task_events WHERE project_id IS NULL ORDER BY rowid')
             return [event for payload, in rows if (event := json.loads(payload))['task'].get('project') == project]
 
     @classmethod
@@ -366,6 +366,38 @@ class TaskManager:
         self._after_write()
         return deleted
 
+    def restore_deleted_task(self, task_snapshot):
+        """Re-insert a recently deleted task snapshot (used by non-blocking Undo)."""
+        if not isinstance(task_snapshot, dict) or not task_snapshot.get('id'):
+            return None
+        task = self._normalise(task_snapshot)
+        task['revision'] = int(task.get('revision', 1)) + 1
+        task.pop('claim_token', None)
+        task.pop('owner', None)
+        if task.get('status') == 'in_progress':
+            task['status'] = 'pending'
+        with self._connection(write=True) as conn:
+            if conn.execute('SELECT 1 FROM tasks WHERE id=?', (task['id'],)).fetchone():
+                return None
+            project = task.get('project')
+            if project and not conn.execute('SELECT 1 FROM projects WHERE name=?', (project,)).fetchone():
+                task['project'] = None
+            position = conn.execute('SELECT COALESCE(MIN(position),0)-1 FROM tasks').fetchone()[0]
+            conn.execute('INSERT INTO tasks VALUES (?,?,?)', (task['id'], position, self._json(task)))
+            self._record_event(conn, task, 'restored')
+        self._after_write()
+        return task
+
+    def move_task_project(self, task_id, new_project):
+        target = new_project.strip() if new_project and new_project != 'Tümü' else None
+        if target and target not in self.projects:
+            raise ValueError('Hedef proje bulunamadı.')
+        def update(task):
+            task['project'] = target
+            if task.get('status') == 'in_progress':
+                task['status'] = 'pending'
+        return self._edit(task_id, update)
+
     def archive_completed(self, project_filter=None):
         count = 0
         with self._connection(write=True) as conn:
@@ -434,6 +466,47 @@ class TaskManager:
             self._delete_project(conn, name)
         self._after_write()
         return exists
+
+    def rename_project(self, old_name, new_name):
+        new_name = new_name.strip()
+        if not new_name or new_name == 'Tümü':
+            raise ValueError('Geçerli bir proje adı girin.')
+        if new_name == old_name:
+            return False
+        with self._connection(write=True) as conn:
+            if not conn.execute('SELECT 1 FROM projects WHERE name=?', (old_name,)).fetchone():
+                raise ValueError('Proje bulunamadı.')
+            if conn.execute('SELECT 1 FROM projects WHERE name=?', (new_name,)).fetchone():
+                raise ValueError('Bu proje adı zaten mevcut.')
+            conn.execute('UPDATE projects SET name=? WHERE name=?', (new_name, old_name))
+            conn.execute('UPDATE project_ids SET name=? WHERE name=?', (new_name, old_name))
+            for payload, in conn.execute('SELECT payload FROM tasks').fetchall():
+                task = json.loads(payload)
+                if task.get('project') == old_name:
+                    task['project'] = new_name
+                    self._write_task(conn, task)
+            row = conn.execute("SELECT payload FROM settings WHERE key='selected_project'").fetchone()
+            if row and json.loads(row[0]) == old_name:
+                conn.execute("INSERT OR REPLACE INTO settings VALUES ('selected_project',?)", (self._json(new_name),))
+        self._after_write()
+        return True
+
+    def unbind_project(self, project):
+        with self._connection(write=True) as conn:
+            row = conn.execute('SELECT binding FROM projects WHERE name=?', (project,)).fetchone()
+            if not row or not row[0]:
+                return False
+            self._detach_projection(json.loads(row[0]))
+            conn.execute('UPDATE projects SET binding=NULL WHERE name=?', (project,))
+            for payload, in conn.execute('SELECT payload FROM tasks').fetchall():
+                task = json.loads(payload)
+                if task.get('project') == project and task.get('status') == 'in_progress':
+                    task.update(status='pending', revision=task['revision'] + 1)
+                    task.pop('claim_token', None)
+                    task.pop('owner', None)
+                    self._write_task(conn, task)
+        self._after_write()
+        return True
 
     def get_tasks(self, project_filter=None, archived=False):
         return [t for t in self.tasks if bool(t.get('archived_at')) == archived and

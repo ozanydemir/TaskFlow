@@ -5,20 +5,66 @@ from PyQt5.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPainterPath, 
 CONTROL_STYLE = """
 QPushButton {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #131e31, stop:1 #0c1320);
-    color: #b3c6e9; border: 1px solid #263754; border-radius: 10px;
+    color: #b3c6e9; border: 1px solid #2d4264; border-radius: 10px;
 }
 QPushButton:hover { background: #192943; border-color: #4a84e8; }
-QPushButton:focus { border-color: #75b7ff; }
+QPushButton:focus { border: 2px solid #75b7ff; }
 QPushButton:pressed { background: #101b30; }
 QPushButton:checked { background: #18365f; border-color: #399cff; }
 """
 
 MENU_STYLE = """
-QMenu { background: #111b2b; color: #dfebff; border: 1px solid #334969; padding: 6px; }
-QMenu::item { padding: 10px 22px; border-radius: 6px; }
-QMenu::item:selected { background: #213d68; }
+QMenu { background: #111b2b; color: #dfebff; border: 1px solid #354c70; border-radius: 8px; padding: 6px; }
+QMenu::item { padding: 8px 18px; border-radius: 6px; }
+QMenu::item:selected { background: #213d68; color: #ffffff; }
+QMenu::item:disabled { color: #6d81a3; }
 QMenu::separator { height: 1px; background: #283b58; margin: 5px 10px; }
 """
+
+DARK_SCROLLBAR_STYLE = """
+QScrollBar:vertical { background: transparent; width: 6px; margin: 2px 0; }
+QScrollBar::handle:vertical { background: #46628a; border-radius: 3px; min-height: 28px; }
+QScrollBar::handle:vertical:hover { background: #60a5fa; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
+QScrollBar:horizontal { background: transparent; height: 6px; margin: 0 2px; }
+QScrollBar::handle:horizontal { background: #46628a; border-radius: 3px; min-width: 28px; }
+QScrollBar::handle:horizontal:hover { background: #60a5fa; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal { background: transparent; }
+"""
+
+DIALOG_STYLE = """
+QLineEdit, QTextEdit, QListWidget {
+    background: #0e1624; color: #f2f5fc; border: 1px solid #354c70;
+    border-radius: 8px; padding: 7px 10px; font-size: 12px;
+    selection-background-color: #1d56d8; selection-color: #ffffff;
+}
+QLineEdit:focus, QTextEdit:focus, QListWidget:focus { border: 1px solid #60a5fa; }
+QListWidget::item { padding: 7px 8px; border-radius: 6px; }
+QListWidget::item:selected { background: #1e375e; color: #ffffff; }
+QPushButton {
+    background: #131d30; color: #d4e2ff; border: 1px solid #354c70;
+    border-radius: 8px; padding: 7px 14px; font-size: 12px; font-weight: 600;
+}
+QPushButton:hover { background: #1b2b45; color: #ffffff; border-color: #4f79b8; }
+QPushButton:focus { border: 2px solid #75b7ff; }
+QPushButton:pressed { background: #10192b; }
+QPushButton:disabled { background: #101726; color: #879aba; border-color: #24334d; }
+QPushButton[role="primary"] {
+    background: #1d56d8; color: #ffffff; border: 1px solid #3b76f6; font-weight: 700;
+}
+QPushButton[role="primary"]:hover { background: #2563eb; border-color: #60a5fa; }
+QPushButton[role="primary"]:focus { border: 2px solid #a9caff; }
+QPushButton[role="primary"]:pressed { background: #1746b3; }
+QPushButton[role="primary"]:disabled { background: #16233a; color: #879aba; border-color: #2a3d5e; }
+QPushButton[role="danger"] {
+    background: #c81e1e; color: #ffffff; border: 1px solid #e03e3e; font-weight: 700;
+}
+QPushButton[role="danger"]:hover { background: #dc2626; border-color: #f87171; }
+QPushButton[role="danger"]:focus { border: 2px solid #fca5a5; }
+QPushButton[role="danger"]:pressed { background: #9b1c1c; }
+""" + DARK_SCROLLBAR_STYLE
 
 
 def make_icon(name, color='#acc0e6', size=24):
@@ -80,6 +126,33 @@ def make_icon(name, color='#acc0e6', size=24):
         p.drawLine(QPointF(4, 10), QPointF(20, 10))
         for x in (8, 16):
             p.drawLine(QPointF(x, 3), QPointF(x, 7))
+    elif name == 'note':
+        p.drawRoundedRect(QRectF(4, 4, 16, 16), 2.5, 2.5)
+        p.drawLine(QPointF(8, 9), QPointF(16, 9))
+        p.drawLine(QPointF(8, 13), QPointF(16, 13))
+        p.drawLine(QPointF(8, 17), QPointF(12.5, 17))
+    elif name == 'warning':
+        path = QPainterPath(QPointF(12, 3.5))
+        path.lineTo(21, 19.5)
+        path.lineTo(3, 19.5)
+        path.closeSubpath()
+        p.drawPath(path)
+        p.drawLine(QPointF(12, 9.5), QPointF(12, 13.8))
+        p.drawPoint(QPointF(12, 16.8))
+    elif name == 'blocked':
+        p.drawEllipse(QRectF(3.5, 3.5, 17, 17))
+        p.drawLine(QPointF(6.5, 17.5), QPointF(17.5, 6.5))
+    elif name == 'sync':
+        p.drawArc(QRectF(4, 4, 16, 16), 35 * 16, 145 * 16)
+        p.drawArc(QRectF(4, 4, 16, 16), 215 * 16, 145 * 16)
+        p.drawLine(QPointF(17, 5), QPointF(20, 8))
+        p.drawLine(QPointF(7, 19), QPointF(4, 16))
+    elif name == 'check_circle':
+        p.drawEllipse(QRectF(3.5, 3.5, 17, 17))
+        path = QPainterPath(QPointF(8, 12.2))
+        path.lineTo(10.8, 15)
+        path.lineTo(16.2, 9.2)
+        p.drawPath(path)
     elif name in ('check', 'logo'):
         if name == 'logo':
             gradient = QLinearGradient(4, 5, 19, 21)
