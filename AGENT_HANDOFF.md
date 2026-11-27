@@ -473,3 +473,30 @@ Installation and first join (real profile):
 
 Next: join the remaining computer, then bind projects on each PC as needed.
 Not published: no tag or GitHub Release was created.
+
+## 2026-11-27: UX critique P0/P1 fixes, local build and installation
+
+An Impeccable dual-agent UX critique of the shipped `440x640` interface surfaced P0 interaction bugs and P1 daily-use gaps. Fixes were implemented on a branch, live-tested by the user, fast-forward merged to `master` (`d40027b`), built and installed on this PC.
+
+### Summary of changes (`d40027b`)
+
+- **P0 interaction reliability (`app_gui.py`):** Card menus and edit dialogs are now parented to the main window (`self.window()`), and the 1.5s `_poll_external_changes()` refresh defers while any modal dialog or popup menu is active. Frameless `eventFilter` resizing now handles active resize moves/releases outside `self.rect()` so outward drags work continuously and releases outside the window never leave resize stuck. `ModernDialog` modals are draggable. Vertical scroll position is preserved across task edits/toggles; selecting a scrolled project tab updates styles in place and scrolls the active tab into view; dragged tabs clear their pressed state on pan release.
+- **Compact `440x640` / `340x460` layout (`app_gui.py`):** Existing task notes stay visible at all widths via a compact note pill; active tasks sort above completed tasks in the GUI list; card padding/spacing is tightened and the redundant `QSizeGrip` is removed; `clear_btn` switches to `'Arşivle'` below `436px` (eliminating `400-428px` overflow); below `385px` the subtitle hides and `Proje Ekle` collapses to an icon button so `340x460` has zero header/footer clipping; extra-long unbroken tokens insert zero-width break points for wrapping.
+- **Daily controls & window lifecycle (`task_manager.py`, `app_gui.py`, `main.py`):** Added `move_task_project` (`Projeye taşı`), `rename_project` (`Projeyi yeniden adlandır`, preserving stable `project_ids` and journal history), `unbind_project` (`Bağlantıyı kaldır`), Windows autostart toggle (`Windows ile başlat`) in the app and tray menus, a 6-second non-blocking Undo bar + `Ctrl+Z` (`restore_deleted_task`) after task deletion, published-task uncheck confirmation, `Ctrl+N` / `Ctrl+Shift+S` shortcuts, sane `Esc` (clears/blurs input before hiding), single-click tray toggle (`Trigger` only), persisted user window geometry, and `QLocalServer` single-instance raise-to-front on relaunch.
+- **Progressive Agent disclosure, semantic status pills & dialogs (`app_gui.py`, `taskflow_visuals.py`):** Agent/publication card menu items appear only for bound projects or tasks already carrying agent status/results/delivery. `in_progress`, `needs_review`, `blocked` and `published` states render with distinct color pills and vector icons while keeping dates visible. Unified `DIALOG_STYLE` and dark scrollbars across all dialogs, WCAG >= 4.5:1 primary/destructive button contrast, visible input focus ring, unmistakably disabled Add button, `"Kaydet"` submit labels on edit dialogs, multiline note editor (`Ctrl+Enter`), single-button info alerts, project labels in `Arşiv · Tümü`, `Onayla ve tamamla` / `Tekrar sıraya al` inside `Agent sonucu` for `needs_review`, and a `Şimdi eşitle` button in `CloudSyncDialog` (with `cloud_timer` stopping on `signed_out`).
+
+### Verification
+
+- All 90 tests passed with `QT_QPA_PLATFORM=offscreen`, including 4 new P0/P1 regression tests covering deferred poll during modal dialogs, outward edge resize & outside release, scroll & far-tab preservation, Escape/Undo/move/rename/unbind, and `400x640`/`340x460` layout non-clipping.
+- Offscreen visual renders at `440x640`, `400x640`, `340x460` and all updated dialogs were inspected with zero clipping.
+- Built agent bridge, desktop application and setup installer cleanly. Frozen `dist/TaskFlow.exe --verify-build` passed (`ok: true`, all 8 checks) and `dist_agent/TaskFlowAgent.exe --help` exited 0.
+- Setup ran through Explorer; installed `TaskFlow.exe` and `TaskFlowAgent.exe` match the built SHA256 digests below.
+- Graphify AST update completed: 670 nodes, 1782 edges; no API/LLM used.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist/TaskFlow.exe | 41947297 | aab03cb25365cc10dcebbbe9e488253f13b7473b2912067ae93ba19e8fc84ccf |
+| dist_agent/TaskFlowAgent.exe | 9135071 | b2d0ff806a10ddc42bbbfc9de87ce7b4e9ecb2bba6dc76720b7eb8913c2ac543 |
+| dist_installer/TaskFlowSetup.exe | 62129884 | bb9861897bc64af399c64b7a7b86c8f35efe9bc84af613889e508cf83cbff395 |
+
+Not published: no tag or GitHub Release was created.
