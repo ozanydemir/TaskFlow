@@ -395,6 +395,37 @@ was run against it), and no build, bridge build, installer or installation.
 Next: build and install on this PC, sign in from the app, then join the other
 two computers.
 
+## 2026-11-25: local build and installation of a1a4f90
+
+Verification:
+- Bridge, app and installer built from a clean a1a4f90 checkout (all exit 0).
+- Frozen `TaskFlow.exe --verify-build` passed with disposable data.
+- Frozen `TaskFlowAgent.exe list` on a temporary store with cloud sync on and
+  no stored session returned the task plus the warning "Bulut senkronu için
+  yeniden giriş yapın": cloud_sync is bundled, Credential Manager is read and
+  no network request is made without a session.
+- The running app was closed, the setup was launched through Explorer, and
+  the installed TaskFlow.exe and TaskFlowAgent.exe match the built digests.
+  The installed app restarted, responds and shows its TaskFlow window.
+- The store and log read from this session showed the same contents before
+  and after (no tasks); this session may see the Claude package's redirected
+  AppData view, so the real store was not independently inspected.
+
+| Artifact | Bytes | SHA256 |
+| --- | ---: | --- |
+| dist/TaskFlow.exe | 40232565 | 72ee98f07958641a7485342e0e6e9077f92235fcdfeed3ee5cb944fe73d8b2ae |
+| dist_agent/TaskFlowAgent.exe | 9133686 | 53c545228f01ede5c09d8f9b7dcdf5e51a59a6d8b1521c77847c52458fd716f2 |
+| dist_installer/TaskFlowSetup.exe | 60416587 | 13f6f25834d93bcd41b2e2bba9989d3eab74c931879d0c30d8fdc38dcf35a16f |
+
+Real project, 2026-11-26: the user signed in from the installed app's Bulut
+senkronu window by email link. Credential Manager holds
+`TaskFlow Supabase <project host>` (user TaskFlow) and the account is listed
+in Supabase Auth. A task the user then added in the app appeared in
+taskflow_records (kind task, revision 1, not deleted), so the background push
+works. The second computer's first join (next section) received this
+project-less task created at 17:18, so the pull side is confirmed too.
+Not published: no tag or GitHub Release.
+
 ## 2026-11-26: cloud version installed on a PC with existing data
 
 This workstation had the 2026-10-24 build (task menu fix, no cloud code) and a
@@ -442,4 +473,3 @@ Installation and first join (real profile):
 
 Next: join the remaining computer, then bind projects on each PC as needed.
 Not published: no tag or GitHub Release was created.
-
